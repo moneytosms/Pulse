@@ -1,0 +1,6 @@
+{
+  "env": {
+    "PROJECT_FMT": "",
+    "NODE_ENV": "development"
+  }
+}
