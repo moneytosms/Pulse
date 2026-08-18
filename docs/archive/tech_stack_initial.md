@@ -1,3 +1,16 @@
+> **ARCHIVED — superseded by [`docs/architecture.md`](../architecture.md).**
+>
+> This was the initial technology proposal. It is kept for provenance only.
+> Several things here were changed by the architecture tickets on
+> [the map](https://github.com/moneytosms/Pulse/issues/1) — notably the auth model
+> (this document implies passwordless email OTP; Pulse uses password-primary auth with
+> OTP for verification and step-up), the `IdentityProvider` interface (two calls, not one),
+> and the "stateless backend" goal (rejected in favour of Redis-backed sessions, ADR-0003).
+>
+> **Do not follow this document.**
+
+---
+
 Pulse Technical Architecture & Technology Stack
 
 Version 1.0 - Implementation Architecture Proposal

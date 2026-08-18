@@ -1,3 +1,14 @@
+> **ARCHIVED — superseded by [`docs/domain-model.md`](../domain-model.md) and [`CONTEXT.md`](../../CONTEXT.md).**
+>
+> This was the initial conceptual domain model. It is kept for provenance only.
+> Several entities here changed: `Patient Record` was collapsed into `Patient` (ADR-0002),
+> `Summary Insight` was dropped entirely (ADR-0009), `Access Permission` was reshaped,
+> and the Medical Entry super-type was made concrete as joined-table inheritance (ADR-0001).
+>
+> **Do not follow this document.**
+
+---
+
 ================================================================================
 PULSE - CONCEPTUAL DOMAIN MODEL (NORMALIZED CORE SCHEMA)
 ================================================================================
