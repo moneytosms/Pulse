@@ -208,9 +208,52 @@ Medication adherence is excluded. It is not derivable from prescriptions: knowin
 
 ---
 
+## Notifications
+
+```
+user (1) ──< (N) notification
+user (1) ──< (N) notification_preference
+```
+
+`notification` stores `type` + `params` (JSONB), **never rendered text**. The body is rendered at read time through the locale catalogs — a notification stored as English is untranslatable forever, and notifications are read weeks after they are written.
+
+`params` holds identifiers and non-clinical values only. Same rule as audit metadata, same reason: a notification is a copy of information sitting outside the consent filter.
+
+Preferences are per event type per channel. Mandatory events — break-glass, consent changes, security — are absent from the preferences UI rather than shown as locked toggles.
+
+**"A clinician viewed your records" is a daily digest, not a per-view notification.** Per-view it fires every time a doctor opens a timeline, which trains users to ignore the notification stream entirely — worse than no transparency feature, because it looks like one. With no scheduler in the stack, the digest is computed on read.
+
+---
+
 ## Data quality
 
-Pending [#12](https://github.com/moneytosms/Pulse/issues/12).
+```
+patient (1) ──< (N) data_quality_flag
+duplicate_review_item ──── two patient ids
+patient_merge ──── audit trail of a completed merge
+```
+
+### Duplicate detection
+
+Deduplication is over **Patient identities**, not entries. The realistic case is two Providers each creating an unclaimed Patient for the same walk-in.
+
+Scoring uses `pg_trgm`: trigram similarity on a normalised name (0.5), date of birth with transposition tolerance (0.3), phone (0.2).
+
+**Name normalisation sorts tokens.** Indian naming conventions place the given name first in some regions and last in others, so "Menon Ramesh" and "Ramesh Menon" are the same person and must not score as unrelated.
+
+**Trigram, not phonetic.** Soundex and Metaphone encode English phonetics and perform poorly on romanised Indian names. The actual failure mode is transliteration variance, which trigrams handle and which is indexable.
+
+Candidates are **blocked** before scoring — same birth year, same phone, or a trigram index hit — or detection is O(n²) and degrades with every patient added.
+
+### Merging
+
+Human-only, reversible, tombstoned. See [ADR-0011](./adr/0011-merges-are-human-only-and-reversible.md). The review interface shows identity fields and entry counts, never clinical contents.
+
+### Flags
+
+`MISSING_DOB` · `MISSING_CONTACT` · `FUTURE_DATED_ENTRY` · `IMPLAUSIBLE_DOB` · `UNCLAIMED_LONG_LIVED`
+
+Informational. They never block anything.
 
 What is already fixed:
 

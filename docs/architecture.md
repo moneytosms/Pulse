@@ -93,14 +93,34 @@ Files live behind the storage adapter; the database holds only metadata, path an
 
 ## Internationalisation
 
-Four locales ship: English, Hindi, Tamil, Malayalam.
+Four locales ship: English, Hindi, Tamil, Malayalam. `next-intl` with path-prefixed routing (`/ta/records`), catalogs namespaced one file per feature per locale so four people editing translations do not conflict on every PR.
 
-The API returns **machine-readable error codes** plus an English default message, never user-facing strings. This is the half that cannot be retrofitted: a raw `"Consent already revoked"` in a response body is untranslatable forever without touching every endpoint.
+The middleware matcher **must exclude `/api`** — Caddy routes those to FastAPI on the same origin, and a locale middleware rewriting API paths breaks every request in a way that takes an hour to find.
 
-**The interface is localized; clinical data is not.** A Diagnosis recorded as "Type 2 diabetes mellitus" reads that way in every locale.
+Indian number and date conventions come from `Intl` natively — `Intl.NumberFormat('en-IN')` produces `12,34,567`, dates render day-first. No custom formatting code; writing some would produce a worse result than the platform already gives.
+
+The API returns **machine-readable error codes** plus an English default message, never user-facing strings. This is the half that cannot be retrofitted: a raw `"Consent already revoked"` in a response body is untranslatable forever without touching every endpoint. Notifications are stored the same way — type plus parameters, rendered at read time.
+
+Missing keys throw in development and CI, fall back to English in production. A silent fallback means a missing Tamil string is discovered by a reviewer who reads Tamil, live.
+
+Fonts must carry Devanagari, Tamil and Malayalam. Most default UI stacks carry none of the three, and the failure is a silent fallback to whatever the OS has.
+
+**The interface is localized; clinical data is not.** A Diagnosis recorded as "Type 2 diabetes mellitus" reads that way in every locale. Medication names, test names and note text are never translated — translating clinical content means generating medical claims the system cannot stand behind, and a mistranslated dosage is a safety issue, not a formatting one.
 
 ## Deployment
 
 `docker compose up` brings the whole system up on any machine with Docker: `caddy`, `frontend`, `backend`, `postgres`, `redis`, `mailpit`.
 
-Mail goes to Mailpit, which catches SMTP locally and serves a web inbox — nothing leaves the machine, no credentials in the repo, and the demo can show an email arriving. Real SMTP is an environment variable change, not a code change.
+Mail goes to Mailpit, which catches SMTP locally and serves a web inbox on `:8025` — nothing leaves the machine, no credentials in the repo, and the demo can show an email arriving beside the app. Real SMTP is an environment variable change, not a code change.
+
+Email is dispatched via FastAPI `BackgroundTasks` after the response returns. There is no task queue and none is being added: a broker plus a worker container is real infrastructure for a handful of messages. The trade-off is explicit — a failed send is logged and lost, which is acceptable because the in-app notification is written transactionally and is the system of record.
+
+`git clone && docker compose up` must produce a working, seeded system. That is the acceptance test for the scaffold.
+
+## Testing
+
+Integration tests against a real PostgreSQL container are the spine — the project's risk is concentrated in *did the consent filter actually apply to that query*, and a mocked-database test tests the mock. Unit tests are reserved for genuinely branchy logic: permission resolution, duplicate scoring, consent expiry.
+
+The negative tests are the ones that matter: revoked consent returns nothing, expired consent returns nothing, consent scoped to lab reports does not leak clinical notes, an administrator gets nothing, an unauthorised clinician gets 404 rather than 403. A positive test passes just as happily when the filter is missing entirely.
+
+CI gates every PR — `ruff`, `mypy`, `pytest` for the backend; `eslint`, `tsc --noEmit`, `next build` for the frontend; plus the route-coverage test, the entry-query lint and the cross-module import lint. No pre-commit hooks: they get bypassed and generate noise commits, and CI cannot be argued with.
