@@ -14,7 +14,7 @@ Architecture and planning are complete. Phase 1 implementation has not started.
 | Domain model | Locked. See [`docs/domain-model.md`](docs/domain-model.md) |
 | API contract | Locked. See [`docs/api-conventions.md`](docs/api-conventions.md) |
 | Decisions | 15 ADRs in [`docs/adr/`](docs/adr/) |
-| Delivery plan | [`docs/delivery-plan.md`](docs/delivery-plan.md) |
+| Delivery plan | [`docs/delivery-plan.md`](docs/delivery-plan.md), tracked on [#17](https://github.com/moneytosms/Pulse/issues/17) |
 | Code | Not yet scaffolded |
 
 ## Quickstart

@@ -4,7 +4,7 @@ Who builds what, in what order, and where the waiting happens.
 
 Architecture is settled — see [`architecture.md`](./architecture.md), [`domain-model.md`](./domain-model.md), [`api-conventions.md`](./api-conventions.md) and [`adr/`](./adr/). This document is the other half: turning those decisions into four people's work without them blocking each other.
 
-Tracked on the delivery map. Each person has one slice ticket; this file is the reasoning behind the slices.
+Tracked on [the build plan](https://github.com/moneytosms/Pulse/issues/17): one slice ticket per person — [#18 database](https://github.com/moneytosms/Pulse/issues/18) · [#19 backend](https://github.com/moneytosms/Pulse/issues/19) · [#20 frontend](https://github.com/moneytosms/Pulse/issues/20) · [#21 platform](https://github.com/moneytosms/Pulse/issues/21). This file is the reasoning behind the slices.
 
 ---
 
