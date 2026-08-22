@@ -4,7 +4,7 @@ How Pulse's entities are structured and why. Terms used here are defined in [`CO
 
 Supersedes `docs/archive/core_schema_rough.md`. Where the two disagree, this one is correct.
 
-**Status:** in progress. Sections are filled in as the architecture tickets on [the map](https://github.com/moneytosms/Pulse/issues/1) resolve. Anything not yet covered is still an open ticket, not an omission.
+**Status:** settled for v1. Every entity the four phases build is described here. It changes as the schema learns — a migration that adds a column belongs in this file the same day.
 
 ---
 
