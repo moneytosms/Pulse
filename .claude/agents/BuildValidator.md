@@ -1,3 +1,10 @@
+---
+name: BuildValidator
+description: Run lint, build, and tests on demand and report pass/fail with the relevant errors. Use when validating that a change compiles and the suite is green.
+model: sonnet
+tools: Bash
+---
+
 # BuildValidator Agent
 
 Run lint, build, and tests. Return pass/fail + relevant errors.

@@ -1,3 +1,10 @@
+---
+name: LogAnalyzer
+description: Parse crash logs, build errors, and stack traces to surface the root cause. Use when handed a failure log to triage.
+model: haiku
+tools: Read, Bash, Grep
+---
+
 # LogAnalyzer Agent
 
 Parse crash logs, build errors, and traces. Surface root cause.

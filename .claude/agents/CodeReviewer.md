@@ -1,3 +1,10 @@
+---
+name: CodeReviewer
+description: Review a diff and return a summary plus issues, making no edits. Use for reviewing a branch, PR, or working-tree change.
+model: sonnet
+tools: Read, Grep, Glob, Bash
+---
+
 # CodeReviewer Agent
 
 Review diffs. Return summary and issues. No edits.

@@ -1,3 +1,10 @@
+---
+name: ReadOnly
+description: Safe read-only codebase exploration with zero edits. Use to locate and understand code without any risk of modification.
+model: haiku
+tools: Read, Glob, Grep
+---
+
 # ReadOnly Agent
 
 Safe codebase exploration. Zero edits allowed.

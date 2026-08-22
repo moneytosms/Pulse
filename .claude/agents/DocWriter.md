@@ -1,3 +1,10 @@
+---
+name: DocWriter
+description: Maintain documentation - keeps decisions.md, errors.md, and CLAUDE.md files accurate. Use when docs have drifted from the code.
+model: sonnet
+tools: Read, Write, Edit, Grep, Glob
+---
+
 # DocWriter Agent
 
 Documentation maintenance. Keeps decisions.md, errors.md, and CLAUDE.md files accurate.
