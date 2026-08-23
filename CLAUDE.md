@@ -75,7 +75,7 @@ docs/               All project documentation. Start at docs/README-less index b
   agents/             How agents should use this repo's issue tracker and domain docs.
   archive/            Superseded initial specs. Do not follow these.
 .claude/
-  rules/              Loaded into context. clinical-safety, backend, database, frontend.
+  rules/              Loaded into context. clinical-safety, backend, database, frontend, agent-output-conventions.
   decisions.md        Decision index. The long form lives in docs/adr/.
   errors.md           Major errors only. Append, never delete.
   agents/ commands/ hooks/   Agent definitions, slash commands, lifecycle hooks.
@@ -85,10 +85,11 @@ Planned, not yet scaffolded — `backend/app/{core,db,modules,adapters}`, `front
 
 ## Scoped rules
 
-`.claude/rules/` files load by glob match. Four exist:
+`.claude/rules/` files load by glob match. Five exist:
 
 - **`clinical-safety.md`** — applies everywhere, no exceptions. Access rules, what never goes in JSONB, what never goes in an audit event.
 - **`backend.md`** · **`database.md`** · **`frontend.md`** — per-layer.
+- **`agent-output-conventions.md`** — house style for anything that reports back to an agent: no silent truncation, explicit empty states, end with a concrete next command.
 
 If a rule gets in the way, that is the rule working. Escalate rather than working around it — every one of them was decided against a named alternative.
 
@@ -106,7 +107,7 @@ If a rule gets in the way, that is the rule working. Escalate rather than workin
 
 GitHub Issues on `moneytosms/Pulse`, via `gh` CLI. See `docs/agents/issue-tracker.md`.
 
-The planning map (#1) and its 15 tickets are closed. Live work is one build-plan ticket with four per-person slice tickets beneath it.
+The planning map (#1) and its 15 tickets are closed. Live work is the build plan (#17) with four per-person slice tickets beneath it (#18 database, #19 backend, #20 frontend, #21 platform) and the sequencing ticket #22, which is the answer to "what is available to pick up right now".
 
 ### Triage labels
 

@@ -6,6 +6,8 @@ Architecture is settled — see [`architecture.md`](./architecture.md), [`domain
 
 Tracked on [the build plan](https://github.com/moneytosms/Pulse/issues/17): one slice ticket per person — [#18 database](https://github.com/moneytosms/Pulse/issues/18) · [#19 backend](https://github.com/moneytosms/Pulse/issues/19) · [#20 frontend](https://github.com/moneytosms/Pulse/issues/20) · [#21 platform](https://github.com/moneytosms/Pulse/issues/21). This file is the reasoning behind the slices.
 
+**For "what do I pick up next", read [#22](https://github.com/moneytosms/Pulse/issues/22)** — the step-by-step sequencing across all four slices, with every blocker and dependant named. This file explains why the work is shaped this way; that ticket says what order to do it in.
+
 ---
 
 ## Team and ownership
