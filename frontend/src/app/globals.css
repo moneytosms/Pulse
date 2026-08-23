@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens — PLACEHOLDER, not finalized.
+ * docs/design-direction.md narrows but does not decide:
+ *   - Typography: Option A (Noto Sans across all scripts) is the
+ *     recommendation to start from, pending a side-by-side mismatch check
+ *     against Option B (Anek).
+ *   - Colour: Direction (c) Sand + Iris is the technical recommendation
+ *     (passes AA on step-9 solids), pending a "not blue" veto check against
+ *     Direction (a) Blue + Slate.
+ * These values approximate that recommendation so the pipeline has
+ * something to render. Swap in real Radix Colors scale values (via the
+ * `@radix-ui/colors` primitives, per design-direction.md's token-source
+ * decision) once someone has actually looked at both directions.
+ */
+@theme {
+  --font-sans:
+    "Noto Sans", "Noto Sans Devanagari", "Noto Sans Tamil",
+    "Noto Sans Malayalam", ui-sans-serif, system-ui, sans-serif;
+
+  /* Sand (neutral) + Iris (accent) placeholder ramp — not the real Radix scale. */
+  --color-background: #fdfdfc;
+  --color-foreground: #21201c;
+  --color-accent: #5b5bd6;
+  --color-accent-foreground: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  @theme {
+    /* Radix dark-ramp guidance: step 1 as page bg, step 12 (~#edeef0) as
+       body text, never pure #000000 (OLED halation — see design-direction.md). */
+    --color-background: #191918;
+    --color-foreground: #edeef0;
+    --color-accent: #8d8df3;
+    --color-accent-foreground: #131022;
+  }
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}

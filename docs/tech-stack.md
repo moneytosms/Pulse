@@ -69,14 +69,22 @@ export const config = { matcher: '/((?!api|_next|_vercel|.*\\..*).*)' };
 
 Without it every API call gets a locale prefix rewritten onto it, and the symptom looks nothing like the cause.
 
+### Next.js 16.3.2: `next build` crashes on `/_global-error`
+
+Confirmed during Phase 0 scaffolding: `next build` fails prerendering `/_global-error` with `TypeError: Cannot read properties of null (reading 'useContext')`, on a stock scaffold with no custom code. Upstream Turbopack static-generation bug — see [vercel/next.js#95741](https://github.com/vercel/next.js/issues/95741) (best-diagnosed), also #86178, #84994, #94667. No fix exists in any published `16.3.x` release; `--webpack`, `experimental.prerenderEarlyExit`, `experimental.cpus`, `output: standalone` all fail to work around it. `next dev` and `next lint`/`tsc --noEmit` are unaffected — CI and the Dockerfile (`npm run dev`) don't hit this. Re-test on every `16.3.x` patch bump; drop this note once fixed upstream.
+
+### postgres:18 changed its data volume mount point
+
+`postgres:18+` images store data in a `pg_ctlcluster`-compatible layout and refuse to start if a volume is mounted at the old `18-`-era path `/var/lib/postgresql/data` — confirmed during Phase 0 integration (`docker compose up` failed with `Error: in 18+, these Docker images are configured to store database data in a format which is compatible with "pg_ctlcluster"...`). Mount the volume at `/var/lib/postgresql` (no `/data` suffix) instead; Postgres places its versioned subdirectory underneath on its own. See `compose.yaml`.
+
 ### testcontainers
 
 The PyPI package is `testcontainers` (not `testcontainers-python`); import is `from testcontainers.postgres import PostgresContainer`, and `get_connection_url(driver=...)` is how you get an asyncpg URL rather than the psycopg default.
 
 ### pg_trgm
 
-Ships in contrib but still needs `CREATE EXTENSION pg_trgm;` per database — it belongs in the first migration alongside the two database roles. Verify with a five-minute smoke test on the exact image tag before CI depends on it; the Alpine variant was not confirmed at primary-source level during research.
+Ships in contrib but still needs `CREATE EXTENSION pg_trgm;` per database — it belongs in the first migration alongside the two database roles. **Confirmed via live smoke test during Phase 0 integration**: `CREATE EXTENSION pg_trgm;` on `postgres:18.6` (the Debian variant compose.yaml pins) succeeds and `pg_roles`/`pg_extension` reflect it after `alembic upgrade head`. The Alpine variant remains unconfirmed — not in use here, so untested by this pass.
 
 ## What was not verified
 
-Two items from the version research are honest gaps, both flagged rather than assumed: the `pg_trgm` bundling in `postgres:18-alpine` specifically (the Debian variant was confirmed), and the testcontainers Postgres module at source-file level (its API is confirmed through docs and package metadata). Both are cheap to settle with a smoke test during Phase 0.
+One item from the version research remains an honest gap: the `pg_trgm` bundling in `postgres:18-alpine` specifically (not the tag this project uses — `postgres:18.6`, the Debian variant, which Phase 0 integration confirmed live). The testcontainers Postgres module is confirmed through docs and package metadata but not yet exercised against a real test run (no test suite exists yet). Both cheap to settle when either becomes load-bearing.
