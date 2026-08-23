@@ -4,7 +4,7 @@ How Pulse is built and why. Terms are defined in [`CONTEXT.md`](../CONTEXT.md); 
 
 Supersedes `docs/archive/tech_stack_initial.md`.
 
-**Status:** in progress. Filled in as the architecture tickets on [the map](https://github.com/moneytosms/Pulse/issues/1) resolve.
+**Status:** settled. Every architecture ticket on the planning map resolved; this document is the result. It changes when the code teaches us something, not while questions are still open. Work is sliced across the team in [`delivery-plan.md`](./delivery-plan.md).
 
 ---
 
