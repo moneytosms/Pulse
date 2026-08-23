@@ -2,7 +2,7 @@
   "model": "claude-sonnet-5",
   "statusLine": {
     "type": "command",
-    "command": "bash \"$(case \"$CLAUDE_PROJECT_DIR\" in /mnt/*) printf '%s' \"$CLAUDE_PROJECT_DIR\";; *) wslpath -u \"$CLAUDE_PROJECT_DIR\" 2>/dev/null || printf '%s' \"$CLAUDE_PROJECT_DIR\";; esac)/.claude/hooks/statusline.sh\"",
+    "command": "node \"$(case \"$CLAUDE_PROJECT_DIR\" in /mnt/*) printf '%s' \"$CLAUDE_PROJECT_DIR\";; *) wslpath -u \"$CLAUDE_PROJECT_DIR\" 2>/dev/null || printf '%s' \"$CLAUDE_PROJECT_DIR\";; esac)/.claude/hooks/statusline.mjs\"",
     "padding": 1
   },
   "permissions": {
