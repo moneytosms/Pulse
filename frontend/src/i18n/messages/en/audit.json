@@ -1,0 +1,27 @@
+{
+  "title": "Who accessed my records",
+  "subtitle": "Every read of your record, recorded automatically.",
+  "loading": "Loading your access history…",
+  "notFound": "We could not find a patient profile linked to your account.",
+  "error": {
+    "title": "Could not load your access history",
+    "retry": "Try again"
+  },
+  "empty": {
+    "title": "No access recorded yet",
+    "body": "Nobody has viewed your record yet."
+  },
+  "fields": {
+    "actor": "Accessed by",
+    "provider": "Provider",
+    "action": "Action",
+    "occurredAt": "When",
+    "entryType": "Entry type"
+  },
+  "entryTypeNone": "—",
+  "actions": {
+    "ENTRY_VIEWED": "Viewed entries"
+  },
+  "loadMore": "Load more",
+  "loadingMore": "Loading more…"
+}

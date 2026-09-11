@@ -18,5 +18,9 @@
     "true": "",
     "false": ""
   },
-  "signOut": ""
+  "signOut": "",
+  "links": {
+    "consent": "",
+    "audit": ""
+  }
 }

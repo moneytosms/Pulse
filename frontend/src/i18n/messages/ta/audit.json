@@ -1,0 +1,27 @@
+{
+  "title": "",
+  "subtitle": "",
+  "loading": "",
+  "notFound": "",
+  "error": {
+    "title": "",
+    "retry": ""
+  },
+  "empty": {
+    "title": "",
+    "body": ""
+  },
+  "fields": {
+    "actor": "",
+    "provider": "",
+    "action": "",
+    "occurredAt": "",
+    "entryType": ""
+  },
+  "entryTypeNone": "",
+  "actions": {
+    "ENTRY_VIEWED": ""
+  },
+  "loadMore": "",
+  "loadingMore": ""
+}

@@ -11,24 +11,32 @@ import { routing } from "./routing";
 // every catalog at build time and a missing file is a build error.
 import enCommon from "./messages/en/common.json";
 import enAuth from "./messages/en/auth.json";
+import enAudit from "./messages/en/audit.json";
+import enConsent from "./messages/en/consent.json";
 import enEntry from "./messages/en/entry.json";
 import enErrors from "./messages/en/errors.json";
 import enProfile from "./messages/en/profile.json";
 import enTimeline from "./messages/en/timeline.json";
 import hiCommon from "./messages/hi/common.json";
 import hiAuth from "./messages/hi/auth.json";
+import hiAudit from "./messages/hi/audit.json";
+import hiConsent from "./messages/hi/consent.json";
 import hiEntry from "./messages/hi/entry.json";
 import hiErrors from "./messages/hi/errors.json";
 import hiProfile from "./messages/hi/profile.json";
 import hiTimeline from "./messages/hi/timeline.json";
 import taCommon from "./messages/ta/common.json";
 import taAuth from "./messages/ta/auth.json";
+import taAudit from "./messages/ta/audit.json";
+import taConsent from "./messages/ta/consent.json";
 import taEntry from "./messages/ta/entry.json";
 import taErrors from "./messages/ta/errors.json";
 import taProfile from "./messages/ta/profile.json";
 import taTimeline from "./messages/ta/timeline.json";
 import mlCommon from "./messages/ml/common.json";
 import mlAuth from "./messages/ml/auth.json";
+import mlAudit from "./messages/ml/audit.json";
+import mlConsent from "./messages/ml/consent.json";
 import mlEntry from "./messages/ml/entry.json";
 import mlErrors from "./messages/ml/errors.json";
 import mlProfile from "./messages/ml/profile.json";
@@ -40,6 +48,8 @@ const CATALOGS: Record<string, Catalog> = {
   en: {
     ...enCommon,
     auth: enAuth,
+    audit: enAudit,
+    consent: enConsent,
     entry: enEntry,
     errors: enErrors,
     profile: enProfile,
@@ -48,6 +58,8 @@ const CATALOGS: Record<string, Catalog> = {
   hi: {
     ...hiCommon,
     auth: hiAuth,
+    audit: hiAudit,
+    consent: hiConsent,
     entry: hiEntry,
     errors: hiErrors,
     profile: hiProfile,
@@ -56,6 +68,8 @@ const CATALOGS: Record<string, Catalog> = {
   ta: {
     ...taCommon,
     auth: taAuth,
+    audit: taAudit,
+    consent: taConsent,
     entry: taEntry,
     errors: taErrors,
     profile: taProfile,
@@ -64,6 +78,8 @@ const CATALOGS: Record<string, Catalog> = {
   ml: {
     ...mlCommon,
     auth: mlAuth,
+    audit: mlAudit,
+    consent: mlConsent,
     entry: mlEntry,
     errors: mlErrors,
     profile: mlProfile,

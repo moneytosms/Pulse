@@ -18,5 +18,9 @@
     "true": "Claimed",
     "false": "Unclaimed"
   },
-  "signOut": "Sign out"
+  "signOut": "Sign out",
+  "links": {
+    "consent": "Who has access to my records",
+    "audit": "Who accessed my records"
+  }
 }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Callout } from "@/components/ui/Callout";
-import { useRouter } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 import { api, ApiError } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { useApiErrorMessage } from "@/lib/errors";
@@ -124,6 +124,15 @@ export default function ProfilePage() {
           </div>
         ))}
       </dl>
+
+      <div className="flex flex-wrap gap-4">
+        <Link href="/consent" className="text-sm font-medium text-accent-text underline">
+          {t("links.consent")}
+        </Link>
+        <Link href="/audit" className="text-sm font-medium text-accent-text underline">
+          {t("links.audit")}
+        </Link>
+      </div>
     </section>
   );
 }

@@ -1,0 +1,79 @@
+{
+  "list": {
+    "title": "",
+    "subtitle": "",
+    "loading": "",
+    "loadMore": "",
+    "loadingMore": "",
+    "grantCta": "",
+    "notFound": "",
+    "error": {
+      "title": "",
+      "retry": ""
+    },
+    "empty": {
+      "title": "",
+      "body": ""
+    },
+    "status": {
+      "ACTIVE": "",
+      "REVOKED": "",
+      "EXPIRED": ""
+    },
+    "purpose": {
+      "TREATMENT": "",
+      "SECOND_OPINION": "",
+      "OTHER": ""
+    },
+    "fields": {
+      "grantee": "",
+      "purpose": "",
+      "scope": "",
+      "expires": "",
+      "granted": "",
+      "revokedAt": ""
+    },
+    "scope": {
+      "allTypes": "",
+      "dateWindow": "",
+      "fromOnly": "",
+      "toOnly": "",
+      "noWindow": ""
+    },
+    "revoke": {
+      "action": "",
+      "confirmTitle": "",
+      "confirmBody": "",
+      "reasonLabel": "",
+      "confirm": "",
+      "cancel": "",
+      "revoking": "",
+      "success": ""
+    }
+  },
+  "new": {
+    "title": "",
+    "subtitle": "",
+    "back": "",
+    "fields": {
+      "granteeUserId": "",
+      "entryTypes": "",
+      "entryTypesHint": "",
+      "fromDate": "",
+      "toDate": "",
+      "purpose": "",
+      "purposeText": "",
+      "expiresAt": ""
+    },
+    "validation": {
+      "requiredFields": ""
+    },
+    "submit": "",
+    "submitting": "",
+    "success": {
+      "title": "",
+      "body": "",
+      "viewConsents": ""
+    }
+  }
+}

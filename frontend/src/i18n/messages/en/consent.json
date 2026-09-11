@@ -1,0 +1,79 @@
+{
+  "list": {
+    "title": "Who has access",
+    "subtitle": "Everyone you've granted access to your record, and for how long.",
+    "loading": "Loading your consents…",
+    "loadMore": "Load more",
+    "loadingMore": "Loading more…",
+    "grantCta": "Grant access",
+    "notFound": "We could not find a patient profile linked to your account.",
+    "error": {
+      "title": "Could not load your consents",
+      "retry": "Try again"
+    },
+    "empty": {
+      "title": "No consents yet",
+      "body": "You haven't granted anyone access to your record."
+    },
+    "status": {
+      "ACTIVE": "Active",
+      "REVOKED": "Revoked",
+      "EXPIRED": "Expired"
+    },
+    "purpose": {
+      "TREATMENT": "Treatment",
+      "SECOND_OPINION": "Second opinion",
+      "OTHER": "Other"
+    },
+    "fields": {
+      "grantee": "Grantee",
+      "purpose": "Purpose",
+      "scope": "Scope",
+      "expires": "Expires",
+      "granted": "Granted",
+      "revokedAt": "Revoked"
+    },
+    "scope": {
+      "allTypes": "All entry types",
+      "dateWindow": "{from} – {to}",
+      "fromOnly": "From {from}",
+      "toOnly": "Until {to}",
+      "noWindow": "No date limit"
+    },
+    "revoke": {
+      "action": "Revoke",
+      "confirmTitle": "Revoke this consent?",
+      "confirmBody": "They will immediately lose access to your record.",
+      "reasonLabel": "Reason (optional)",
+      "confirm": "Confirm revoke",
+      "cancel": "Cancel",
+      "revoking": "Revoking…",
+      "success": "Access revoked."
+    }
+  },
+  "new": {
+    "title": "Grant access",
+    "subtitle": "Give a clinician access to part of your record, for a limited time.",
+    "back": "Back to who has access",
+    "fields": {
+      "granteeUserId": "Clinician user ID",
+      "entryTypes": "Entry types",
+      "entryTypesHint": "Leave all unchecked to grant every entry type.",
+      "fromDate": "From date (optional)",
+      "toDate": "To date (optional)",
+      "purpose": "Purpose",
+      "purposeText": "Describe the purpose",
+      "expiresAt": "Access expires"
+    },
+    "validation": {
+      "requiredFields": "Enter a grantee, purpose and expiry."
+    },
+    "submit": "Grant access",
+    "submitting": "Granting…",
+    "success": {
+      "title": "Access granted",
+      "body": "The grantee can now read the entry types and date range you chose, until it expires or you revoke it.",
+      "viewConsents": "Back to who has access"
+    }
+  }
+}
