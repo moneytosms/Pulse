@@ -12,6 +12,7 @@ from app.core.redis import close_redis
 from app.modules.audit.routes import router as audit_router
 from app.modules.auth.routes import router as auth_router
 from app.modules.consent.routes import router as consent_router
+from app.modules.notifications.routes import router as notifications_router
 from app.modules.patients.routes import router as patients_router
 from app.modules.providers.routes import router as providers_router
 from app.modules.records.routes import router as records_router
@@ -36,6 +37,7 @@ app.include_router(records_router)
 app.include_router(providers_router)
 app.include_router(consent_router)
 app.include_router(audit_router)
+app.include_router(notifications_router)
 
 
 @app.get("/api/v1/health")
