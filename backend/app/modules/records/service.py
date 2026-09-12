@@ -5,12 +5,22 @@ takes an `Actor`; there are no "internal" helpers that skip it — the pure
 ORM->wire mappers live in `projections.py` precisely so they are not
 somewhere a filter could have been dropped.
 
-Phase 2 access — a Patient reads their own history, and a Provider Staff
-user reads/writes coarsely (any record; narrowed to the authoring
-Provider in Phase 3). A Clinician, an Administrator or another Patient
+Read access (P3.3/P3.4, #39/#40) — a Patient reads their own history; a
+Provider Staff user reads entries authored by their own Provider. Writes
+(`insert_entry`/`supersede_entry`) stay the Phase 2 coarse Provider Staff
+allowance — any patient — pending a decision on narrowing them too. A
+Clinician with no live permission, an Administrator, or an unrelated actor
 gets **404, never 403**: a 403 would confirm the record exists
-(clinical-safety.md). Consent, break-glass and audit emission all land in
-Phase 3; the read paths carry `# TODO(P3): emit ENTRY_VIEWED`.
+(clinical-safety.md). Clinician consent/break-glass matching landed in #41
+(P3.5). Audit emission (P3.8, #45): `list_timeline`/`get_entry` each emit
+one `ENTRY_VIEWED`, `get_document` one `DOCUMENT_VIEWED`, via
+`app.modules.audit.service.emit` — never on a denied read, since a denial
+never reaches `accessible_entries` in the first place. `add_document` does
+not emit: it's a write (filing), not a view, and the audit action enum has
+no upload-shaped value for it (`AuditAction`, `audit/models.py`).
+`request_id` is not yet threaded through from the HTTP layer (no
+middleware assigns one), so every `emit()` call here passes it as `None`
+until that lands.
 """
 
 from __future__ import annotations
@@ -23,11 +33,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.storage import StorageProvider
 from app.core.actor import Actor
-from app.core.authz import Role
 from app.core.errors import ErrorCode
 from app.core.exceptions import PulseError
 from app.core.pagination import Page
-from app.modules.records import projections, repository
+from app.modules.audit import service as audit_service
+from app.modules.audit.service import AuditAction, AuditMetadata, AuditOutcome
+from app.modules.records import access, projections, repository
 from app.modules.records.models import EntryType
 from app.modules.records.schemas import (
     Document,
@@ -71,20 +82,34 @@ def _not_found() -> PulseError:
     return PulseError(ErrorCode.NOT_FOUND, "No such record.", http_status=404)
 
 
+async def _provider_name(session: AsyncSession, provider_id: UUID | None) -> str | None:
+    """Provider display name for the audit projection's `provider_name`
+    (not clinical content — a Provider's public identity, `PROVIDER_READ`
+    is open to every signed-in role). None when the Entry carries no
+    `source_provider_id`."""
+    if provider_id is None:
+        return None
+    provider = await users_service.get_provider(session, provider_id)
+    return provider.name if provider is not None else None
+
+
 async def _authorize_entry_access(
     session: AsyncSession, actor: Actor, patient_id: UUID
 ) -> None:
-    """Phase 2 access — rule 1 plus a coarse Provider Staff allowance.
+    """P3.3/P3.4 (#39, #40) access — rules 1–2 via `access.resolve_patient_access`.
 
-    The Patient reads their own history; a Provider Staff user reads any
-    record (narrowed to the authoring Provider, and to live Consent for
-    Clinicians, in Phase 3). Everyone else — Clinician, Administrator,
-    another Patient — gets 404, never 403 (clinical-safety.md).
+    This is the identity gate ("does `actor` have any relationship to this
+    patient at all"), not `repository.accessible_entries` itself —
+    `accessible_entries` decides which *entries* are visible and would
+    wrongly 404 a Patient or Provider Staff member whose history is
+    genuinely empty. Both are built from the same rule-1/rule-2 lookups
+    (`repository.actor_owns_patient` / `provider_id_for_staff_actor`), so
+    they can't drift apart. Everyone else — Clinician with no live
+    permission yet, Administrator, an unrelated Patient — gets 404, never
+    403 (clinical-safety.md, ADR-0007). Rules 3–4 land in #41 (P3.5).
     """
-    if actor.role is Role.PROVIDER_STAFF:
-        return
-    patient = await users_service.get_patient(session, patient_id)
-    if patient is None or patient.user_id != actor.user_id:
+    resolved = await access.resolve_patient_access(session, actor, patient_id)
+    if not resolved.has_any_access:
         raise _not_found()
 
 
@@ -115,7 +140,23 @@ async def list_timeline(
     rows, next_cursor = await repository.list_timeline(
         session, actor, patient_id, entry_type=entry_type, cursor=cursor, limit=limit
     )
-    # TODO(P3): emit ENTRY_VIEWED
+    # One ENTRY_VIEWED per call regardless of page size (#45 acceptance) —
+    # this describes the query, not a row, so `resource_id` is patient-level
+    # (None) and the entry-type filter (when the caller narrowed by one) is
+    # the only per-request detail worth keeping.
+    await audit_service.emit(
+        session,
+        actor=actor,
+        action=AuditAction.ENTRY_VIEWED,
+        resource_type="medical_entry",
+        resource_id=None,
+        patient_id=patient_id,
+        outcome=AuditOutcome.SUCCESS,
+        metadata=AuditMetadata(
+            entry_type=entry_type.value if entry_type is not None else None,
+            count=len(rows),
+        ),
+    )
     return Page[EntrySummary](
         items=[projections.to_summary(r) for r in rows], next_cursor=next_cursor
     )
@@ -128,7 +169,17 @@ async def get_entry(session: AsyncSession, actor: Actor, entry_id: UUID) -> Entr
     await _authorize_entry_access(session, actor, entry.patient_id)
     supersedes_id = await repository.get_superseding_original_id(session, entry_id)
     documents = await repository.list_documents(session, entry_id)
-    # TODO(P3): emit ENTRY_VIEWED
+    provider_name = await _provider_name(session, entry.source_provider_id)
+    await audit_service.emit(
+        session,
+        actor=actor,
+        action=AuditAction.ENTRY_VIEWED,
+        resource_type="medical_entry",
+        resource_id=entry.id,
+        patient_id=entry.patient_id,
+        outcome=AuditOutcome.SUCCESS,
+        metadata=AuditMetadata(entry_type=entry.entry_type.value, provider_name=provider_name),
+    )
     return projections.to_detail(
         entry, supersedes_id=supersedes_id, documents=documents
     )
@@ -150,7 +201,7 @@ async def insert_entry(
         payload = payload.model_copy(update={"source_provider_id": provider_id})
     entry = await repository.insert_entry(session, actor, patient_id, payload)
     await session.commit()
-    fresh = await repository.get_entry(session, actor, entry.id)
+    fresh = await repository.get_entry_unfiltered(session, actor, entry.id)
     if fresh is None:  # pragma: no cover - just inserted
         raise _not_found()
     return projections.to_detail(fresh, supersedes_id=None, documents=[])
@@ -168,7 +219,7 @@ async def supersede_entry(
     restricts this to Provider Staff (RECORDS_WRITE)."""
     if await users_service.get_patient(session, patient_id) is None:
         raise _not_found()
-    original = await repository.get_entry(session, actor, original_id)
+    original = await repository.get_entry_unfiltered(session, actor, original_id)
     if original is None or original.patient_id != patient_id:
         raise _not_found()
     _validate_payload(payload)
@@ -187,7 +238,7 @@ async def supersede_entry(
             http_status=409,
         )
     await session.commit()
-    fresh = await repository.get_entry(session, actor, replacement.id)
+    fresh = await repository.get_entry_unfiltered(session, actor, replacement.id)
     if fresh is None:  # pragma: no cover - just inserted
         raise _not_found()
     return projections.to_detail(fresh, supersedes_id=original_id, documents=[])
@@ -254,5 +305,16 @@ async def get_document(
     if entry is None:
         raise _not_found()
     await _authorize_entry_access(session, actor, entry.patient_id)
+    provider_name = await _provider_name(session, entry.source_provider_id)
+    await audit_service.emit(
+        session,
+        actor=actor,
+        action=AuditAction.DOCUMENT_VIEWED,
+        resource_type="medical_document",
+        resource_id=doc.id,
+        patient_id=entry.patient_id,
+        outcome=AuditOutcome.SUCCESS,
+        metadata=AuditMetadata(entry_type=entry.entry_type.value, provider_name=provider_name),
+    )
     data = await storage.get(doc.storage_path)
     return projections.to_document(doc), data
