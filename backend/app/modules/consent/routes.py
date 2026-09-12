@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.authz import Permission
@@ -54,7 +54,7 @@ async def list_consents(
     response: Response,
     ctx: CurrentUser,
     session: SessionDep,
-    patient_id: UUID | None = None,
+    patient_id: Annotated[UUID | None, Query(alias="patientId")] = None,
 ) -> Page[Consent]:
     return _STUB_PAGE
 
