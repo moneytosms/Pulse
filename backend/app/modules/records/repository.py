@@ -23,7 +23,7 @@ from datetime import UTC, date, datetime, time
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import CursorResult, Select, and_, false, or_, select, text, update
+from sqlalchemy import CursorResult, Select, and_, false, func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectin_polymorphic
 
@@ -42,7 +42,14 @@ from app.modules.records.models import (
     Prescription,
     Procedure,
 )
-from app.modules.records.schemas import DocumentCreate, EntryCreate
+from app.modules.records.schemas import (
+    DocumentCreate,
+    EntryCreate,
+    LabTrendPoint,
+    MedicationSummary,
+    MonthlyVisitCount,
+    ProviderEntryCount,
+)
 from app.modules.users import service as users_service
 
 _SUBTYPES = (Diagnosis, Prescription, LabReport, Procedure, ClinicalNote)
@@ -461,3 +468,147 @@ async def reassign_entries_by_id(
     await session.execute(
         update(MedicalEntry).where(MedicalEntry.id.in_(entry_ids)).values(patient_id=to_patient_id)
     )
+
+
+# --- Analytics (P4.2, #53) --------------------------------------------------
+#
+# Every query below starts from `accessible_entries` — there is no
+# `summary_insight` table (ADR-0009), so an unauthorised or unrelated actor
+# gets an empty series here for exactly the reason they get an empty
+# timeline: the `or_()` in `accessible_entries` has nothing to match.
+
+
+async def lab_trend(
+    session: AsyncSession, actor: Actor, patient_id: UUID, *, code_system: str, code: str
+) -> list[LabTrendPoint]:
+    """One (code_system, code)'s values over time. Vital signs have no
+    separate subtype — they're LOINC-coded `lab_report` rows like any
+    other observation — so this same query serves both "lab trends per
+    test code" and "vital sign trends" (domain-model.md)."""
+    # Joins the raw Core table (`LabReport.__table__`), not the mapped
+    # class: joining the ORM entity here pulls in its *full* joined-table-
+    # inheritance selectable (`medical_entry JOIN lab_report`, aliased),
+    # which then has no join condition back to the outer `medical_entry`
+    # from `accessible_entries` — an unconstrained cross join that
+    # silently multiplies every row.
+    lab_report = LabReport.__table__
+    stmt = (
+        (await accessible_entries(session, actor, patient_id))
+        .with_only_columns(
+            MedicalEntry.occurred_at,
+            lab_report.c.value_numeric,
+            lab_report.c.value_text,
+            lab_report.c.unit,
+            lab_report.c.reference_low,
+            lab_report.c.reference_high,
+        )
+        .join(lab_report, lab_report.c.id == MedicalEntry.id)
+        .where(MedicalEntry.entry_type == EntryType.LAB_REPORT)
+        .where(lab_report.c.code_system == code_system, lab_report.c.code == code)
+        .order_by(MedicalEntry.occurred_at)
+    )
+    rows = (await session.execute(stmt)).all()
+    return [
+        LabTrendPoint(
+            occurred_at=r.occurred_at,
+            value_numeric=r.value_numeric,
+            value_text=r.value_text,
+            unit=r.unit,
+            reference_low=r.reference_low,
+            reference_high=r.reference_high,
+        )
+        for r in rows
+    ]
+
+
+async def visit_frequency_by_month(
+    session: AsyncSession, actor: Actor, patient_id: UUID
+) -> list[MonthlyVisitCount]:
+    """Entry count per calendar month. There is no separate Visit entity
+    in the domain model (domain-model.md names no such table), so a
+    month's entry count stands in for visit frequency — a documented
+    reading of the spec, not a modelled concept."""
+    base = (await accessible_entries(session, actor, patient_id)).where(
+        MedicalEntry.superseded_by_id.is_(None)
+    )
+    sub = base.subquery()
+    month_col = func.date_trunc("month", sub.c.occurred_at)
+    stmt = (
+        select(month_col.label("month"), func.count(sub.c.id).label("count"))
+        .group_by(month_col)
+        .order_by(month_col)
+    )
+    rows = (await session.execute(stmt)).all()
+    return [MonthlyVisitCount(month=row.month.date(), count=row.count) for row in rows]
+
+
+async def active_medications(
+    session: AsyncSession, actor: Actor, patient_id: UUID
+) -> list[MedicationSummary]:
+    """Prescriptions not superseded by a correction. Prescription carries
+    no start/end date, so "active" is read as "not yet corrected away" —
+    `superseded_by_id IS NULL`, the same predicate the timeline already
+    uses to mean "current" (documented assumption)."""
+    # Joins the raw Core table — see `lab_trend`'s comment for why the
+    # mapped `Prescription` class can't be used as the join target here.
+    prescription = Prescription.__table__
+    stmt = (
+        (await accessible_entries(session, actor, patient_id))
+        .with_only_columns(
+            MedicalEntry.occurred_at,
+            prescription.c.medication_name,
+            prescription.c.dosage,
+            prescription.c.frequency,
+            prescription.c.route,
+        )
+        .join(prescription, prescription.c.id == MedicalEntry.id)
+        .where(MedicalEntry.entry_type == EntryType.PRESCRIPTION)
+        .where(MedicalEntry.superseded_by_id.is_(None))
+        .order_by(MedicalEntry.occurred_at.desc())
+    )
+    rows = (await session.execute(stmt)).all()
+    return [
+        MedicationSummary(
+            occurred_at=r.occurred_at,
+            medication_name=r.medication_name,
+            dosage=r.dosage,
+            frequency=r.frequency,
+            route=r.route,
+        )
+        for r in rows
+    ]
+
+
+async def provider_entry_counts(
+    session: AsyncSession, actor: Actor, patient_id: UUID
+) -> list[ProviderEntryCount]:
+    """Entry count per filing Provider — "provider upload counts"
+    (domain-model.md). Counts Entries, not Documents: most Entries carry
+    no Document, and the domain model has no separate "upload" concept
+    to count instead (documented assumption)."""
+    base = (await accessible_entries(session, actor, patient_id)).where(
+        MedicalEntry.superseded_by_id.is_(None)
+    )
+    sub = base.subquery()
+    stmt = (
+        select(sub.c.source_provider_id, func.count(sub.c.id).label("count"))
+        .group_by(sub.c.source_provider_id)
+        .order_by(func.count(sub.c.id).desc())
+    )
+    rows = (await session.execute(stmt)).all()
+    return [
+        ProviderEntryCount(provider_id=row.source_provider_id, count=row.count) for row in rows
+    ]
+
+
+async def future_dated_entry_count(session: AsyncSession, actor: Actor, patient_id: UUID) -> int:
+    """`FUTURE_DATED_ENTRY` data-quality flag material (domain-model.md,
+    "Data quality"). Counted through `accessible_entries` like every
+    other entry read — the flag itself is informational only and never
+    exposes clinical content, but the row it counts is still a Medical
+    Entry (clinical-safety.md)."""
+    base = (await accessible_entries(session, actor, patient_id)).where(
+        MedicalEntry.occurred_at > func.now()
+    )
+    result = await session.execute(select(func.count()).select_from(base.subquery()))
+    return result.scalar_one()

@@ -46,6 +46,10 @@ from app.modules.records.schemas import (
     EntryCreate,
     EntryDetail,
     EntrySummary,
+    LabTrendPoint,
+    MedicationSummary,
+    MonthlyVisitCount,
+    ProviderEntryCount,
 )
 from app.modules.users import service as users_service
 
@@ -337,3 +341,40 @@ async def reverse_entry_reassignment(
     await repository.reassign_entries_by_id(
         session, actor, entry_ids=entry_ids, to_patient_id=to_patient_id
     )
+
+
+# --- Analytics (P4.2, #53) --------------------------------------------------
+#
+# Thin pass-throughs: the query logic lives in repository.py, this
+# module's one and only Medical-Entry query builder (ADR-0006). No audit
+# emission yet — that lands with P4.3's analytics-on-read composition.
+
+
+async def lab_trend(
+    session: AsyncSession, actor: Actor, patient_id: UUID, *, code_system: str, code: str
+) -> list[LabTrendPoint]:
+    return await repository.lab_trend(
+        session, actor, patient_id, code_system=code_system, code=code
+    )
+
+
+async def visit_frequency_by_month(
+    session: AsyncSession, actor: Actor, patient_id: UUID
+) -> list[MonthlyVisitCount]:
+    return await repository.visit_frequency_by_month(session, actor, patient_id)
+
+
+async def active_medications(
+    session: AsyncSession, actor: Actor, patient_id: UUID
+) -> list[MedicationSummary]:
+    return await repository.active_medications(session, actor, patient_id)
+
+
+async def provider_entry_counts(
+    session: AsyncSession, actor: Actor, patient_id: UUID
+) -> list[ProviderEntryCount]:
+    return await repository.provider_entry_counts(session, actor, patient_id)
+
+
+async def future_dated_entry_count(session: AsyncSession, actor: Actor, patient_id: UUID) -> int:
+    return await repository.future_dated_entry_count(session, actor, patient_id)
