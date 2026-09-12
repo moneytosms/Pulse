@@ -24,6 +24,12 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 _STAFF_EMAIL = "staff000@example.com"
 _DEV_PASSWORD = "Pulse@demo1"
+# staff000 is the only seeded Provider Staff user with a known (demo) password
+# -- everyone else gets an unusable hash (`_build_objects`). Phase 3 rule 2
+# (`accessible_entries`) narrows a Provider Staff read to entries authored by
+# their OWN Provider, so every lookup here must stay scoped to staff000's
+# Provider (Aster Medcity, per `seed/data/identity/provider_staff.csv`).
+_STAFF_PROVIDER_ID = "2908b677-91c9-5a6e-b5c5-6db5a46f60b0"
 
 
 async def _wipe_seed_marker() -> None:
@@ -107,7 +113,9 @@ async def test_seed_loads_entries_for_a_seeded_patient(
     )
     login.raise_for_status()
 
-    _, patient_id = await _lab_report_matching(app_database_url, "TRUE")
+    _, patient_id = await _lab_report_matching(
+        app_database_url, f"medical_entry.source_provider_id = '{_STAFF_PROVIDER_ID}'"
+    )
     resp = await client.get(f"/api/v1/patients/{patient_id}/entries")
     assert resp.status_code == 200
     assert len(resp.json()["items"]) > 0
@@ -126,7 +134,8 @@ async def test_seed_includes_an_out_of_range_numeric_lab(
     entry_id, _ = await _lab_report_matching(
         app_database_url,
         "value_numeric IS NOT NULL AND reference_low IS NOT NULL "
-        "AND (value_numeric < reference_low OR value_numeric > reference_high)",
+        "AND (value_numeric < reference_low OR value_numeric > reference_high) "
+        f"AND medical_entry.source_provider_id = '{_STAFF_PROVIDER_ID}'",
     )
 
     resp = await client.get(f"/api/v1/entries/{entry_id}")
@@ -150,7 +159,9 @@ async def test_seed_includes_a_text_valued_lab(
     login.raise_for_status()
 
     entry_id, _ = await _lab_report_matching(
-        app_database_url, "value_text IS NOT NULL AND value_numeric IS NULL"
+        app_database_url,
+        "value_text IS NOT NULL AND value_numeric IS NULL "
+        f"AND medical_entry.source_provider_id = '{_STAFF_PROVIDER_ID}'",
     )
 
     resp = await client.get(f"/api/v1/entries/{entry_id}")

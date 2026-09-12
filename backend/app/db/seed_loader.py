@@ -160,6 +160,7 @@ def _build_coded_entries(
     entry_type: EntryType,
     cap: int,
     csv_name: str,
+    source_provider_id: uuid.UUID,
 ) -> list[Diagnosis | Procedure]:
     """Diagnosis/Procedure share a shape: SNOMED-CT (code_system, code) plus
     a display name, straight from conditions.csv / procedures.csv."""
@@ -169,6 +170,7 @@ def _build_coded_entries(
             id=_entry_uuid(entry_type.value, patient_id, r["code"], r["start"]),
             patient_id=uuid.UUID(patient_id),
             entry_type=entry_type,
+            source_provider_id=source_provider_id,
             occurred_at=_occurred_at(r["start"]),
             entry_metadata={"import_batch": "seed-part-2", "source": csv_name},
             code_system=r["system"],
@@ -180,7 +182,10 @@ def _build_coded_entries(
 
 
 def _build_prescriptions(
-    rows: list[dict[str, str]], patient_id: str, cap: int
+    rows: list[dict[str, str]],
+    patient_id: str,
+    cap: int,
+    source_provider_id: uuid.UUID,
 ) -> list[Prescription]:
     picked = sorted(rows, key=lambda r: (r["start"], r["code"]))[:cap]
     return [
@@ -188,6 +193,7 @@ def _build_prescriptions(
             id=_entry_uuid("PRESCRIPTION", patient_id, r["code"], r["start"]),
             patient_id=uuid.UUID(patient_id),
             entry_type=EntryType.PRESCRIPTION,
+            source_provider_id=source_provider_id,
             occurred_at=_occurred_at(r["start"]),
             entry_metadata={"import_batch": "seed-part-2", "source": "medications.csv"},
             medication_name=r["description"],
@@ -247,7 +253,10 @@ def _pick_lab_rows(
 
 
 def _build_lab_reports(
-    rows: list[dict[str, str]], patient_id: str, cap: int
+    rows: list[dict[str, str]],
+    patient_id: str,
+    cap: int,
+    source_provider_id: uuid.UUID,
 ) -> list[LabReport]:
     out = []
     for r in _pick_lab_rows(rows, cap):
@@ -258,6 +267,7 @@ def _build_lab_reports(
                 id=_entry_uuid("LAB_REPORT", patient_id, r["code"], r["date"]),
                 patient_id=uuid.UUID(patient_id),
                 entry_type=EntryType.LAB_REPORT,
+                source_provider_id=source_provider_id,
                 occurred_at=_occurred_at(r["date"]),
                 entry_metadata={"import_batch": "seed-part-2", "source": "observations.csv"},
                 code_system="LOINC",
@@ -289,8 +299,19 @@ def _dedupe_new(
     return keep
 
 
+def _provider_for_patient(pid: str, provider_ids: list[uuid.UUID]) -> uuid.UUID:
+    """Deterministic patient -> Provider assignment. Synthea's trimmed
+    encounters.csv carries no provider column, so every seeded Entry needs
+    one invented here rather than left NULL — Phase 3 rule 2
+    (`accessible_entries`) narrows Provider Staff to entries authored by
+    their own Provider, and a NULL `source_provider_id` would match no
+    Provider Staff at all, including the demo login. Hash-based so it is
+    stable across seed runs without being recorded anywhere."""
+    return provider_ids[uuid.UUID(pid).int % len(provider_ids)]
+
+
 def _build_clinical_entries(
-    clinical_dir: Path, patient_ids: list[str]
+    clinical_dir: Path, patient_ids: list[str], provider_ids: list[uuid.UUID]
 ) -> tuple[list[object], dict[str, int]]:
     """A capped, deterministic selection of Medical Entries per Patient,
     read from the already patient-id-remapped `seed/data/clinical/*.csv`
@@ -305,25 +326,30 @@ def _build_clinical_entries(
     seen_ids: set[uuid.UUID] = set()
     counts = {"diagnoses": 0, "procedures": 0, "prescriptions": 0, "lab_reports": 0}
     for pid in sorted(patient_ids):
+        provider_id = _provider_for_patient(pid, provider_ids)
         diagnoses = _dedupe_new(
             _build_coded_entries(
                 Diagnosis, conditions.get(pid, []), pid, EntryType.DIAGNOSIS,
-                _DIAGNOSIS_CAP, "conditions.csv",
+                _DIAGNOSIS_CAP, "conditions.csv", provider_id,
             ),
             seen_ids,
         )
         procs = _dedupe_new(
             _build_coded_entries(
                 Procedure, procedures.get(pid, []), pid, EntryType.PROCEDURE,
-                _PROCEDURE_CAP, "procedures.csv",
+                _PROCEDURE_CAP, "procedures.csv", provider_id,
             ),
             seen_ids,
         )
         rx = _dedupe_new(
-            _build_prescriptions(medications.get(pid, []), pid, _PRESCRIPTION_CAP), seen_ids
+            _build_prescriptions(
+                medications.get(pid, []), pid, _PRESCRIPTION_CAP, provider_id
+            ),
+            seen_ids,
         )
         labs = _dedupe_new(
-            _build_lab_reports(observations.get(pid, []), pid, _LAB_CAP), seen_ids
+            _build_lab_reports(observations.get(pid, []), pid, _LAB_CAP, provider_id),
+            seen_ids,
         )
         entries.extend([*diagnoses, *procs, *rx, *labs])
         counts["diagnoses"] += len(diagnoses)
@@ -416,7 +442,12 @@ async def run_seed() -> SeedResult:
         await session.flush()  # Patients committed to the flush before entries FK to them
 
         patient_ids = [r["id"] for r in _rows(identity_dir / "patients.csv")]
-        entry_objects, entry_counts = _build_clinical_entries(clinical_dir, patient_ids)
+        provider_ids = [
+            uuid.UUID(r["id"]) for r in _rows(identity_dir / "providers.csv")
+        ]
+        entry_objects, entry_counts = _build_clinical_entries(
+            clinical_dir, patient_ids, provider_ids
+        )
         counts.update(entry_counts)
         session.add_all(entry_objects)
         await session.flush()

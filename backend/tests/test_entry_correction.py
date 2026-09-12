@@ -44,6 +44,12 @@ async def _patient_entry_and_staff(
 ) -> tuple[str, str]:
     await register_and_login(email="corr-patient@example.com")
     pid = str((await client.get("/api/v1/patients/me")).json()["id"])
+    await register_and_login(email="corr-staff@example.com", role="PROVIDER_STAFF")
+    # Provider must match the entry's `source_provider_id` — Phase 3 rule 2
+    # (`accessible_entries`) narrows Provider Staff to their own Provider.
+    provider_id = await rh.seed_provider_staff(
+        app_database_url, user_email="corr-staff@example.com"
+    )
     entry_id = str(
         await rh.insert_entry(
             app_database_url,
@@ -51,10 +57,9 @@ async def _patient_entry_and_staff(
             occurred_at=datetime(2025, 2, 2, tzinfo=UTC),
             entry_type="LAB_REPORT",
             value_numeric=15.4,  # the wrong value being corrected
+            source_provider_id=provider_id,
         )
     )
-    await register_and_login(email="corr-staff@example.com", role="PROVIDER_STAFF")
-    await rh.seed_provider_staff(app_database_url, user_email="corr-staff@example.com")
     return pid, entry_id
 
 
