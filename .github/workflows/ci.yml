@@ -44,17 +44,22 @@ jobs:
 
   frontend-e2e:
     runs-on: ubuntu-latest
-    # No-op until another agent commits the Playwright config; the guard skips
-    # the whole job while frontend/playwright.config.ts is absent.
-    if: hashFiles('frontend/playwright.config.ts') != ''
     defaults:
       run:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # No-op until another agent commits the Playwright config. `hashFiles`
+      # needs the checkout to exist first — it errors as an unrecognized
+      # function in a job-level `if:`, which is evaluated before any runner
+      # (and its filesystem) is assigned. Step-level works.
+      - if: hashFiles('frontend/playwright.config.ts') != ''
+        uses: actions/setup-node@v4
         with:
           node-version: 24
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npx playwright test
+      - if: hashFiles('frontend/playwright.config.ts') != ''
+        run: npm ci
+      - if: hashFiles('frontend/playwright.config.ts') != ''
+        run: npx playwright install --with-deps chromium
+      - if: hashFiles('frontend/playwright.config.ts') != ''
+        run: npx playwright test
