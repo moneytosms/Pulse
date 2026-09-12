@@ -423,3 +423,41 @@ async def get_document(
     """Document metadata by id. The caller gates access on the parent
     Entry via `accessible_entries` before serving the bytes."""
     return await session.get(MedicalDocument, document_id)
+
+
+async def reassign_entries_by_patient(
+    session: AsyncSession, actor: Actor, *, from_patient_id: UUID, to_patient_id: UUID
+) -> list[UUID]:
+    """Moves every Medical Entry from one Patient to another (P4.1, #52 —
+    the merge service's write path). Returns the moved ids so the caller
+    can record exactly what to move back on reversal. `actor` takes no
+    part in the query — merges are Administrator-only and every function
+    touching Medical Entries takes one regardless (clinical-safety.md) —
+    but it is exactly what P4.3's audit emission for this path will need.
+    """
+    del actor
+    ids_result = await session.execute(
+        select(MedicalEntry.id).where(MedicalEntry.patient_id == from_patient_id)
+    )
+    ids = list(ids_result.scalars().all())
+    if ids:
+        await session.execute(
+            update(MedicalEntry)
+            .where(MedicalEntry.patient_id == from_patient_id)
+            .values(patient_id=to_patient_id)
+        )
+    return ids
+
+
+async def reassign_entries_by_id(
+    session: AsyncSession, actor: Actor, *, entry_ids: list[UUID], to_patient_id: UUID
+) -> None:
+    """Reversal counterpart to `reassign_entries_by_patient` — moves an
+    explicit id list rather than "everything belonging to a patient",
+    since by reversal time the loser may own nothing at all."""
+    del actor
+    if not entry_ids:
+        return
+    await session.execute(
+        update(MedicalEntry).where(MedicalEntry.id.in_(entry_ids)).values(patient_id=to_patient_id)
+    )

@@ -30,7 +30,14 @@ LoginFactory = Callable[..., Awaitable[Response]]
 _BACKEND_DIR = Path(__file__).resolve().parents[1]
 # Child-first: the app role has DML but not TRUNCATE on these (migration 0002),
 # so teardown is ordered DELETEs, not a single TRUNCATE ... CASCADE.
-_APP_TABLES = ("provider_staff", "patient", '"user"', "provider")
+_APP_TABLES = (
+    "provider_staff",
+    "patient_merge",
+    "duplicate_review_item",
+    "patient",
+    '"user"',
+    "provider",
+)
 
 
 @pytest.fixture(scope="session")

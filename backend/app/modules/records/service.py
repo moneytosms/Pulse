@@ -318,3 +318,22 @@ async def get_document(
     )
     data = await storage.get(doc.storage_path)
     return projections.to_document(doc), data
+
+
+async def reassign_patient_entries(
+    session: AsyncSession, actor: Actor, *, from_patient_id: UUID, to_patient_id: UUID
+) -> list[UUID]:
+    """P4.1 (#52) merge write path — the only way another module may move
+    Medical Entries between Patients. No access check here: the caller
+    (the merge service) is itself the access-controlled boundary."""
+    return await repository.reassign_entries_by_patient(
+        session, actor, from_patient_id=from_patient_id, to_patient_id=to_patient_id
+    )
+
+
+async def reverse_entry_reassignment(
+    session: AsyncSession, actor: Actor, *, entry_ids: list[UUID], to_patient_id: UUID
+) -> None:
+    await repository.reassign_entries_by_id(
+        session, actor, entry_ids=entry_ids, to_patient_id=to_patient_id
+    )

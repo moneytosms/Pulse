@@ -6,14 +6,22 @@ never build queries. Writes flush but do not commit — the calling
 service owns the transaction boundary.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
+from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import ColumnElement, extract, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.authz import Role
-from app.modules.users.models import Patient, Provider, ProviderStaff, User
+from app.modules.users.models import (
+    DuplicateReviewItem,
+    Patient,
+    Provider,
+    ProviderStaff,
+    ReviewStatus,
+    User,
+)
 
 
 async def get_user_by_email(session: AsyncSession, email: str) -> User | None:
@@ -89,3 +97,81 @@ async def get_provider_staff_by_user_id(
         select(ProviderStaff).where(ProviderStaff.user_id == user_id)
     )
     return result.scalar_one_or_none()
+
+
+# --- Duplicate detection (P4.1, #52) ---------------------------------------
+
+
+async def blocked_candidates(session: AsyncSession, subject: Patient) -> list[Patient]:
+    """Every Patient other than `subject` sharing a birth year, a phone,
+    or a trigram hit on the (raw, un-normalised) name (database.md,
+    "Duplicate detection"). `%` is pg_trgm's similarity operator —
+    index-backed by `ix_patient_full_name_trgm` (migration 0008), so this
+    is not a sequential scan over the whole table.
+    """
+    conditions: list[ColumnElement[bool]] = [Patient.full_name.op("%")(subject.full_name)]
+    if subject.date_of_birth is not None:
+        conditions.append(extract("year", Patient.date_of_birth) == subject.date_of_birth.year)
+    if subject.phone is not None:
+        conditions.append(Patient.phone == subject.phone)
+
+    stmt = select(Patient).where(
+        Patient.id != subject.id,
+        Patient.merged_into_id.is_(None),
+        or_(*conditions),
+    )
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def upsert_review_item(
+    session: AsyncSession, *, patient_id_a: UUID, patient_id_b: UUID, score: Decimal
+) -> DuplicateReviewItem | None:
+    """Inserts a `PENDING` review item, or refreshes the score on an
+    existing `PENDING` one. A pair already decided (`MERGED` or
+    `NOT_DUPLICATE`) is left untouched — decided pairs are never
+    re-flagged (ADR-0011).
+    """
+    a, b = sorted((patient_id_a, patient_id_b), key=str)
+    existing = await session.execute(
+        select(DuplicateReviewItem).where(
+            DuplicateReviewItem.patient_id_a == a, DuplicateReviewItem.patient_id_b == b
+        )
+    )
+    item = existing.scalar_one_or_none()
+    if item is not None:
+        if item.status != ReviewStatus.PENDING:
+            return None
+        item.score = score
+        return item
+
+    item = DuplicateReviewItem(patient_id_a=a, patient_id_b=b, score=score)
+    session.add(item)
+    await session.flush()
+    return item
+
+
+async def set_review_status(
+    session: AsyncSession,
+    *,
+    patient_id_a: UUID,
+    patient_id_b: UUID,
+    status: ReviewStatus,
+    decided_by_user_id: UUID,
+) -> DuplicateReviewItem:
+    a, b = sorted((patient_id_a, patient_id_b), key=str)
+    existing = await session.execute(
+        select(DuplicateReviewItem).where(
+            DuplicateReviewItem.patient_id_a == a, DuplicateReviewItem.patient_id_b == b
+        )
+    )
+    item = existing.scalar_one_or_none()
+    if item is None:
+        item = DuplicateReviewItem(patient_id_a=a, patient_id_b=b, score=Decimal("0"))
+        session.add(item)
+
+    item.status = status
+    item.decided_by_user_id = decided_by_user_id
+    item.decided_at = datetime.now(UTC)
+    await session.flush()
+    return item
