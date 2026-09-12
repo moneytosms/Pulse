@@ -20,6 +20,9 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.actor import Actor
+from app.core.authz import Role
+from app.core.errors import ErrorCode
+from app.core.exceptions import PulseError
 from app.modules.analytics.schemas import DataQualityFlag
 from app.modules.records import service as records_service
 from app.modules.records.schemas import (
@@ -72,16 +75,33 @@ def _implausible_dob(dob: date) -> bool:
 
 
 async def identity_data_quality_flags(
-    session: AsyncSession, patient_id: UUID
+    session: AsyncSession, actor: Actor, patient_id: UUID
 ) -> list[DataQualityFlag]:
     """The four flags read straight from the Patient row — no Medical
-    Entry involved, so no `actor` needed (nothing here is clinical
-    content; an Administrator working the data-quality queue is exactly
-    who this is for, and ADR-0007 only bars clinical data, not identity
-    fields already visible in the duplicate-review queue)."""
+    Entry involved, so `accessible_entries` never enters the picture.
+
+    Identity fields are not clinical data (ADR-0007 bars the latter, not
+    the former), but they are still personal data: a `patient_id` is a
+    capability, and a signature without an actor is exactly how a stray
+    id in a log turns into a disclosure. The gate follows the intended
+    consumer rather than trusting the caller: Administrator (the
+    data-quality queue — the only role with a legitimate batch reason to
+    sweep identity gaps) or the Patient's own User (mirroring
+    PATIENT_PROFILE_READ_SELF). Everyone else, including Clinicians —
+    they see identity *through* consent-gated clinical access, not
+    around it — gets `FORBIDDEN` (403: authenticated, role forbids it;
+    no resource-existence leak, api-conventions.md).
+    """
     patient = await users_service.get_patient(session, patient_id)
-    if patient is None:
-        return []
+    # Same shape as the unauthorised case: absence here is a capability-
+    # probe answer, not a data-quality result. (ADR-0007 is why this is
+    # 403, not 404 — Administrators must learn nothing they cannot read.)
+    if patient is None or not _may_read_identity(actor, patient.user_id):
+        raise PulseError(
+            ErrorCode.FORBIDDEN,
+            "You do not have permission to read this patient's data-quality flags.",
+            http_status=403,
+        )
 
     flags: list[DataQualityFlag] = []
     if patient.date_of_birth is None:
@@ -97,10 +117,16 @@ async def identity_data_quality_flags(
     return flags
 
 
+def _may_read_identity(actor: Actor, owner_user_id: UUID | None) -> bool:
+    return actor.role is Role.ADMINISTRATOR or (
+        owner_user_id is not None and owner_user_id == actor.user_id
+    )
+
+
 async def data_quality_flags(
     session: AsyncSession, actor: Actor, patient_id: UUID
 ) -> list[DataQualityFlag]:
-    flags = await identity_data_quality_flags(session, patient_id)
+    flags = await identity_data_quality_flags(session, actor, patient_id)
     future_count = await records_service.future_dated_entry_count(session, actor, patient_id)
     if future_count > 0:
         flags.append(DataQualityFlag.FUTURE_DATED_ENTRY)

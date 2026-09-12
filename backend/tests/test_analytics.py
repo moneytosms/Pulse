@@ -6,6 +6,10 @@ from every function here, exactly like `accessible_entries` itself —
 because that is what each of these composes from (ADR-0006). A
 positive-only suite would pass just as happily if a function quietly
 switched to a raw, unfiltered query.
+
+The identity data-quality flags are additionally actor-gated in the
+service itself (P4.2 security review): Administrator or the Patient's
+own User only — the negative case here is a denial, not an empty list.
 """
 
 from __future__ import annotations
@@ -13,10 +17,13 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, date, datetime, timedelta
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.actor import Actor
 from app.core.authz import Role
+from app.core.errors import ErrorCode
+from app.core.exceptions import PulseError
 from app.modules.analytics import service as analytics_service
 from app.modules.analytics.schemas import DataQualityFlag
 from app.modules.records.models import Diagnosis, LabReport, Prescription
@@ -76,8 +83,57 @@ async def test_unrelated_actor_gets_empty_series_everywhere(db_session: AsyncSes
     assert await analytics_service.visit_frequency_by_month(db_session, actor, patient.id) == []
     assert await analytics_service.active_medications(db_session, actor, patient.id) == []
     assert await analytics_service.provider_entry_counts(db_session, actor, patient.id) == []
-    flags = await analytics_service.data_quality_flags(db_session, actor, patient.id)
-    assert DataQualityFlag.FUTURE_DATED_ENTRY not in flags
+    # Identity flags are gated (P4.2 security review): a stranger's patient_id
+    # is a capability probe, so data_quality_flags denies before anything reads.
+    with pytest.raises(PulseError) as denied:
+        await analytics_service.data_quality_flags(db_session, actor, patient.id)
+    assert denied.value.code is ErrorCode.FORBIDDEN
+
+
+async def test_identity_flags_denied_for_unrelated_and_clinician_actors(
+    db_session: AsyncSession,
+) -> None:
+    owner = await _user(db_session)
+    patient = await _patient(db_session, owner)
+    stranger = await _user(db_session)
+    clinician = await _user(db_session, Role.CLINICIAN)
+
+    with pytest.raises(PulseError) as stranger_denied:
+        await analytics_service.identity_data_quality_flags(
+            db_session, Actor(user_id=stranger.id, role=Role.PATIENT), patient.id
+        )
+    assert stranger_denied.value.code is ErrorCode.FORBIDDEN
+
+    with pytest.raises(PulseError) as clinician_denied:
+        await analytics_service.identity_data_quality_flags(
+            db_session, Actor(user_id=clinician.id, role=Role.CLINICIAN), patient.id
+        )
+    assert clinician_denied.value.code is ErrorCode.FORBIDDEN
+
+
+async def test_identity_flags_unclaimed_patient_readable_by_admin_only(
+    db_session: AsyncSession,
+) -> None:
+    # Provider-filed, never claimed: no user_id, so no self path exists —
+    # only the Administrator data-quality queue may read its flags. Identity
+    # fields are complete, so the admin sees no flags at all.
+    patient = await _patient(
+        db_session, None, date_of_birth=date(1970, 1, 1), phone="+91 90000 00004"
+    )
+    admin = await _user(db_session, Role.ADMINISTRATOR)
+    staff = await _user(db_session, Role.PROVIDER_STAFF)
+
+    admin_actor = Actor(user_id=admin.id, role=Role.ADMINISTRATOR)
+    assert (
+        await analytics_service.identity_data_quality_flags(db_session, admin_actor, patient.id)
+        == []
+    )
+
+    with pytest.raises(PulseError) as staff_denied:
+        await analytics_service.identity_data_quality_flags(
+            db_session, Actor(user_id=staff.id, role=Role.PROVIDER_STAFF), patient.id
+        )
+    assert staff_denied.value.code is ErrorCode.FORBIDDEN
 
 
 async def test_lab_trend_returns_only_matching_code_in_order(db_session: AsyncSession) -> None:
