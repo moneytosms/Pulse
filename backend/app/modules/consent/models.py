@@ -82,3 +82,27 @@ class AccessPermission(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class BreakGlassAccess(Base):
+    """One emergency-access grant (#41/#44, migration 0007). Break-glass is
+    access *without* Consent (domain-model.md), so it cannot reuse
+    `AccessPermission` — its `consent_id` is mandatory. Time-boxed to
+    exactly the granted window; there is no revoke, only expiry."""
+
+    __tablename__ = "break_glass_access"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    patient_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("patient.id", ondelete="CASCADE"), index=True
+    )
+    clinician_user_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("user.id"), index=True
+    )
+    justification: Mapped[str] = mapped_column(String(2000))
+    granted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

@@ -1,24 +1,34 @@
 """Records repository — all SQL for Medical Entries and Documents.
 
 `accessible_entries` (ADR-0006) is the one query builder every clinical
-read composes from. Phase 2 implements **rule 1 only** — a Patient's own
-history; rules 2–4 (Clinician consent, break-glass) raise until Phase 3.
-Every entry-returning function takes an `actor`: if a signature has no
-actor, the access rules have nowhere to apply (clinical-safety.md).
+read composes from, all four rules: the Patient's own history (#39), a
+Provider Staff member's own Provider (#39), a Clinician with live,
+entry-type/date-scoped Consent (#41), and break-glass — unscoped, exactly
+the granted 60-minute window (#41). Every entry-returning function takes
+an `actor`: if a signature has no actor, the access rules have nowhere to
+apply (clinical-safety.md).
+
+An actor matching no rule (wrong patient, wrong provider, or an
+Administrator — ADR-0007) gets an empty result set here, never a raised
+error: `accessible_entries` is a filter, not a permission check with a
+side exit. Nothing special-cases Administrator; no rule below ever
+matches that role, so the `or_()` is simply empty for it.
 
 `list_timeline` / `get_entry` land here in P2.3 / P2.5; `insert_entry` in
 P2.5; `supersede_entry` in P2.7; the document functions in P2.6.
 """
 
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, time
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import CursorResult, Select, or_, select, update
+from sqlalchemy import CursorResult, Select, and_, false, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectin_polymorphic
 
 from app.core.actor import Actor
+from app.core.authz import Role
 from app.core.errors import ErrorCode
 from app.core.exceptions import PulseError
 from app.core.pagination import decode_cursor, encode_cursor
@@ -33,9 +43,117 @@ from app.modules.records.models import (
     Procedure,
 )
 from app.modules.records.schemas import DocumentCreate, EntryCreate
+from app.modules.users import service as users_service
 
 _SUBTYPES = (Diagnosis, Prescription, LabReport, Procedure, ClinicalNote)
 _MAX_LIMIT = 100
+
+
+@dataclass(frozen=True)
+class LivePermission:
+    """One live `access_permission` row granting `grantee_user_id` (a
+    Clinician) access to a Patient — rule 3 material for #41 (P3.5).
+
+    Column names mirror `consent/models.py::AccessPermission`; read there
+    for reference. This is raw SQL rather than the ORM entity: `records`
+    does not import `consent.models` (backend.md — modules communicate
+    through `service`, never another module's tables), and
+    `consent.service` is still a P3.2 stub with nothing to call.
+    """
+
+    id: UUID
+    entry_types: list[str] | None
+    from_date: date | None
+    to_date: date | None
+    expires_at: datetime
+
+
+async def live_permissions_for(
+    session: AsyncSession, *, patient_id: UUID, grantee_user_id: UUID
+) -> list[LivePermission]:
+    """LIVE `access_permission` rows for one (patient, grantee) pair —
+    not expired. Revocation deletes the row transactionally
+    (clinical-safety.md), so existence already means "not revoked"; the
+    `expires_at` check is the rest of "live"."""
+    stmt = text(
+        "SELECT id, entry_types, from_date, to_date, expires_at "
+        "FROM access_permission "
+        "WHERE patient_id = :patient_id "
+        "AND grantee_user_id = :grantee_user_id "
+        "AND expires_at > now()"
+    )
+    rows = (
+        await session.execute(
+            stmt, {"patient_id": patient_id, "grantee_user_id": grantee_user_id}
+        )
+    ).mappings().all()
+    return [
+        LivePermission(
+            id=row["id"],
+            entry_types=row["entry_types"],
+            from_date=row["from_date"],
+            to_date=row["to_date"],
+            expires_at=row["expires_at"],
+        )
+        for row in rows
+    ]
+
+
+async def actor_owns_patient(session: AsyncSession, actor: Actor, patient_id: UUID) -> bool:
+    """Rule 1: `actor` is the Patient identified by `patient_id`."""
+    if actor.role is not Role.PATIENT:
+        return False
+    patient = await users_service.get_patient(session, patient_id)
+    return patient is not None and patient.user_id == actor.user_id
+
+
+async def provider_id_for_staff_actor(session: AsyncSession, actor: Actor) -> UUID | None:
+    """Rule 2's Provider: the one `actor` (a Provider Staff member) works
+    for, or None if `actor` is not staff, or staff at no Provider."""
+    if actor.role is not Role.PROVIDER_STAFF:
+        return None
+    return await users_service.get_provider_for_staff(session, actor.user_id)
+
+
+async def active_break_glass_for(
+    session: AsyncSession, *, patient_id: UUID, clinician_user_id: UUID
+) -> bool:
+    """Rule 4: an unexpired break-glass grant for this (patient, Clinician)
+    pair. Exactly the granted window — no revoke, only expiry
+    (clinical-safety.md, "not open-ended"). Raw SQL for the same reason as
+    `live_permissions_for`: `records` does not import `consent.models`."""
+    stmt = text(
+        "SELECT 1 FROM break_glass_access "
+        "WHERE patient_id = :patient_id "
+        "AND clinician_user_id = :clinician_user_id "
+        "AND expires_at > now() LIMIT 1"
+    )
+    row = (
+        await session.execute(
+            stmt, {"patient_id": patient_id, "clinician_user_id": clinician_user_id}
+        )
+    ).first()
+    return row is not None
+
+
+def _permission_condition(permission: LivePermission, patient_id: UUID) -> Any:
+    """Rule 3's `and_()` branch for one live `access_permission` row:
+    scoped to the patient, and — when set — to its entry types and date
+    window. `entry_types` / dates of `None` mean unscoped on that axis."""
+    parts: list[Any] = [MedicalEntry.patient_id == patient_id]
+    if permission.entry_types is not None:
+        parts.append(MedicalEntry.entry_type.in_(permission.entry_types))
+    if permission.from_date is not None:
+        parts.append(
+            MedicalEntry.occurred_at
+            >= datetime.combine(permission.from_date, time.min, tzinfo=UTC)
+        )
+    if permission.to_date is not None:
+        parts.append(
+            MedicalEntry.occurred_at
+            <= datetime.combine(permission.to_date, time.max, tzinfo=UTC)
+        )
+    return and_(*parts)
 
 
 async def accessible_entries(
@@ -43,11 +161,38 @@ async def accessible_entries(
 ) -> Select[Any]:
     """The subset of a Patient's Medical Entries `actor` may read.
 
-    Composable filter, not a result set. Phase 2: rule 1 — the Patient's
-    own history. The caller (service) has already established that `actor`
-    owns `patient_id`; rules 2–4 arrive in Phase 3.
+    Composable filter, not a result set — each rule below is an `or_()`
+    branch.
     """
-    return select(MedicalEntry).where(MedicalEntry.patient_id == patient_id)
+    conditions: list[Any] = []
+
+    if await actor_owns_patient(session, actor, patient_id):
+        conditions.append(MedicalEntry.patient_id == patient_id)
+
+    provider_id = await provider_id_for_staff_actor(session, actor)
+    if provider_id is not None:
+        conditions.append(
+            and_(
+                MedicalEntry.patient_id == patient_id,
+                MedicalEntry.source_provider_id == provider_id,
+            )
+        )
+
+    if actor.role is Role.CLINICIAN:
+        for permission in await live_permissions_for(
+            session, patient_id=patient_id, grantee_user_id=actor.user_id
+        ):
+            conditions.append(_permission_condition(permission, patient_id))
+
+        if await active_break_glass_for(
+            session, patient_id=patient_id, clinician_user_id=actor.user_id
+        ):
+            conditions.append(MedicalEntry.patient_id == patient_id)
+
+    if not conditions:
+        conditions.append(false())
+
+    return select(MedicalEntry).where(or_(*conditions))
 
 
 def _pack_cursor(occurred_at: datetime, entry_id: UUID) -> str:
@@ -108,10 +253,38 @@ async def list_timeline(
 async def get_entry(
     session: AsyncSession, actor: Actor, entry_id: UUID
 ) -> MedicalEntry | None:
-    """One entry by id, subtype loaded, reachable even when superseded.
+    """One entry by id, subtype loaded, reachable even when superseded,
+    gated by `accessible_entries` — the same rules the timeline applies.
 
-    Phase 2 gate (actor owns the patient) is applied by the service; the
-    filter moves into `accessible_entries` in Phase 3.
+    `accessible_entries` takes a `patient_id`, which isn't known ahead of
+    an id lookup, so this is two queries: a minimal one to find it, then
+    the real gated fetch. Either an inaccessible entry or one with no
+    matching id at all returns None — the caller can't tell them apart,
+    which is the point (clinical-safety.md: 404, never 403).
+    """
+    patient_id = await session.scalar(
+        select(MedicalEntry.patient_id).where(MedicalEntry.id == entry_id)
+    )
+    if patient_id is None:
+        return None
+    stmt = (
+        (await accessible_entries(session, actor, patient_id))
+        .where(MedicalEntry.id == entry_id)
+        .options(selectin_polymorphic(MedicalEntry, list(_SUBTYPES)))
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def get_entry_unfiltered(
+    session: AsyncSession, actor: Actor, entry_id: UUID
+) -> MedicalEntry | None:
+    """Raw fetch by id — no `accessible_entries` gating. Only the read
+    paths (`get_entry`, `add_document`, `get_document`, `list_timeline`)
+    narrow via `accessible_entries` (#39); the coarse Phase 2 Provider
+    Staff write allowance (`insert_entry`'s post-write fetch,
+    `supersede_entry`'s lookup of the original) still applies here, on
+    purpose. `actor` stays a required parameter (clinical-safety.md) even
+    though this function does not use it to filter — the name says why.
     """
     stmt = (
         select(MedicalEntry)
