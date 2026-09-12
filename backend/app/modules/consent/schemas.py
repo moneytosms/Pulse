@@ -1,8 +1,9 @@
-"""Consent wire contract — PROVISIONAL.
+"""Consent + break-glass wire contract.
 
-P2.0 ships these so the frontend consent screens have a shape to build
-against. They are finalised in Phase 3 (P3.2) alongside the real service;
-do not treat field names here as stable yet.
+P2.0 shipped `Consent`/`ConsentCreate`/`RevocationRequest` provisionally so
+the frontend consent screens had a shape to build against; they are now
+final, wired to the real service in P3.6 (#42). `BreakGlassRequest` /
+`BreakGlassGrant` are new in P3.7 (#44).
 """
 
 from __future__ import annotations
@@ -10,6 +11,8 @@ from __future__ import annotations
 from datetime import date, datetime
 from enum import StrEnum
 from uuid import UUID
+
+from pydantic import Field, field_validator
 
 from app.core.schema import PulseSchema
 
@@ -55,3 +58,23 @@ class ConsentCreate(PulseSchema):
 
 class RevocationRequest(PulseSchema):
     reason: str | None = None
+
+
+class BreakGlassRequest(PulseSchema):
+    justification: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("justification")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Justification is required.")
+        return value
+
+
+class BreakGlassGrant(PulseSchema):
+    id: UUID
+    patient_id: UUID
+    clinician_user_id: UUID
+    justification: str
+    granted_at: datetime
+    expires_at: datetime

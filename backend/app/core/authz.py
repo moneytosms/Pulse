@@ -35,9 +35,17 @@ class Permission(StrEnum):
     NOTIFICATION_READ_SELF = "NOTIFICATION_READ_SELF"
     # A Patient reading their own notification preferences.
     NOTIFICATION_PREFERENCES_READ_SELF = "NOTIFICATION_PREFERENCES_READ_SELF"
+    # A Patient marking their own notifications read and changing their own
+    # per-type/per-channel preferences. Mandatory types are never settable
+    # through this — the service rejects it regardless of permission.
+    NOTIFICATION_MANAGE_SELF = "NOTIFICATION_MANAGE_SELF"
     # Reading a Provider organisation's public identity (name, kind, city).
     # No clinical data — every signed-in role may hold it.
     PROVIDER_READ = "PROVIDER_READ"
+    # A Clinician requesting emergency access without Consent. Clinician
+    # only (#44) — a Provider Staff member already has Provider-scoped
+    # access, and no other role may bypass Consent this way.
+    BREAK_GLASS_REQUEST = "BREAK_GLASS_REQUEST"
 
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
@@ -51,6 +59,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.AUDIT_READ_SELF,
             Permission.NOTIFICATION_READ_SELF,
             Permission.NOTIFICATION_PREFERENCES_READ_SELF,
+            Permission.NOTIFICATION_MANAGE_SELF,
             Permission.PROVIDER_READ,
         }
     ),
@@ -59,6 +68,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.USER_CREDENTIALS_CHANGE,
             Permission.RECORDS_READ,
             Permission.PROVIDER_READ,
+            Permission.BREAK_GLASS_REQUEST,
         }
     ),
     Role.PROVIDER_STAFF: frozenset(
