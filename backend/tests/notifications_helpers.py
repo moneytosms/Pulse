@@ -11,6 +11,7 @@ generate the rows the digest reads.
 
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import UTC, datetime
 
@@ -53,7 +54,15 @@ async def insert_audit_event(
 
 
 async def wipe_audit_events(app_database_url: str) -> None:
-    engine = create_async_engine(app_database_url)
+    """`pulse_app` holds SELECT/INSERT only on `audit_event` (ADR-0008,
+    append-only by GRANT) — a DELETE from the app role always raises
+    `InsufficientPrivilegeError`, regardless of row count, since Postgres
+    checks table privilege before matching rows. Test cleanup goes over
+    the admin connection instead, same as `test_seed_entries.py`'s
+    `_wipe_seed_marker` for the same reason. `app_database_url` is kept
+    as a parameter only to trigger the `_environment` fixture that sets
+    `ALEMBIC_DATABASE_URL`; it is not the URL used here."""
+    engine = create_async_engine(os.environ["ALEMBIC_DATABASE_URL"])
     try:
         async with engine.begin() as conn:
             await conn.execute(text("DELETE FROM audit_event"))
