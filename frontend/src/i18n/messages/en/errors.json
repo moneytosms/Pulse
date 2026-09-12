@@ -17,6 +17,7 @@
   "ENTRY_ALREADY_SUPERSEDED": "This entry has already been corrected.",
   "UNSUPPORTED_MEDIA_TYPE": "Only PDF, PNG and JPEG documents are accepted.",
   "PAYLOAD_TOO_LARGE": "This file is too large — compress or split it and try again.",
+  "CONSENT_EXPIRY_OUT_OF_RANGE": "Choose an expiry between 1 day and 1 year from today.",
   "fieldErrors": {
     "missing": "This field is required.",
     "string_type": "Enter a valid value.",

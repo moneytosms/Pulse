@@ -1,0 +1,44 @@
+{
+  "title": "",
+  "subtitle": "",
+  "loading": "",
+  "preferencesCta": "",
+  "error": {
+    "title": "",
+    "retry": ""
+  },
+  "empty": {
+    "title": "",
+    "body": ""
+  },
+  "loadMore": "",
+  "loadingMore": "",
+  "list": {
+    "read": "",
+    "unread": "",
+    "markRead": "",
+    "marking": "",
+    "types": {
+      "CONSENT_GRANTED": "",
+      "CONSENT_REVOKED": "",
+      "RECORD_UPLOADED": "",
+      "BREAK_GLASS_ACCESS": "",
+      "DAILY_DIGEST": ""
+    }
+  },
+  "preferences": {
+    "back": "",
+    "title": "",
+    "subtitle": "",
+    "loading": "",
+    "empty": {
+      "title": "",
+      "body": ""
+    },
+    "channels": {
+      "EMAIL": "",
+      "SMS": "",
+      "IN_APP": ""
+    }
+  }
+}

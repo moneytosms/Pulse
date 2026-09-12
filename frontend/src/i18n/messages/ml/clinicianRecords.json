@@ -1,0 +1,22 @@
+{
+  "title": "",
+  "subtitle": "",
+  "loading": "",
+  "error": {
+    "title": "",
+    "retry": ""
+  },
+  "empty": {
+    "title": "",
+    "body": ""
+  },
+  "notFound": {
+    "title": "",
+    "body": ""
+  },
+  "loadMore": "",
+  "loadingMore": "",
+  "detail": {
+    "back": ""
+  }
+}

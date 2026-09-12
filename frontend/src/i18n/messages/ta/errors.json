@@ -17,6 +17,7 @@
   "ENTRY_ALREADY_SUPERSEDED": "",
   "UNSUPPORTED_MEDIA_TYPE": "",
   "PAYLOAD_TOO_LARGE": "",
+  "CONSENT_EXPIRY_OUT_OF_RANGE": "",
   "fieldErrors": {
     "missing": "",
     "string_type": "",

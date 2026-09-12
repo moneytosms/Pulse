@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { BreakGlassBanner } from "@/components/BreakGlassBanner";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Label } from "@/components/ui/Label";
@@ -22,8 +21,14 @@ import { useApiErrorMessage } from "@/lib/errors";
 import { formatDate } from "@/lib/format";
 import { ENTRY_TYPES, type EntrySummary, type EntryType, type Page } from "@/lib/records";
 
-// One icon per entry-type renderer, paired with the localized type label —
-// never colour alone (.claude/rules/frontend.md).
+// Clinician-facing read of a Patient's record (issue #46). Same
+// `/patients/{patientId}/entries` endpoint the Patient's own timeline uses —
+// access is decided per-request by the backend (`_authorize_entry_access` /
+// Phase 3 `accessible_entries`), not by anything this screen does. A Patient
+// this Clinician has no consent for reads **identically** to a Patient who
+// does not exist: both are a 404 from the same call, rendered by the same
+// `notFound` branch below with no distinguishing text
+// (.claude/rules/clinical-safety.md: a 403 would confirm the record exists).
 const ENTRY_ICONS: Record<EntryType, typeof DiagnosisIcon> = {
   DIAGNOSIS: DiagnosisIcon,
   PRESCRIPTION: PrescriptionIcon,
@@ -54,8 +59,6 @@ function entriesQuery(entryType: EntryType | "", cursor?: string): string {
   return params.toString();
 }
 
-/** Group already-sorted (occurredAt desc) rows under their calendar day,
- * preserving order — never re-sorted client-side. */
 function groupByDate(items: EntrySummary[]): Array<{ dateKey: string; date: Date; rows: EntrySummary[] }> {
   const groups: Array<{ dateKey: string; date: Date; rows: EntrySummary[] }> = [];
   for (const item of items) {
@@ -71,56 +74,23 @@ function groupByDate(items: EntrySummary[]): Array<{ dateKey: string; date: Date
   return groups;
 }
 
-export default function TimelinePage() {
-  const t = useTranslations("timeline");
+export default function ClinicianPatientRecordsPage({
+  params,
+}: {
+  params: Promise<{ patientId: string }>;
+}) {
+  const { patientId } = use(params);
+  const t = useTranslations("clinicianRecords");
+  const tTimeline = useTranslations("timeline");
   const errorMessage = useApiErrorMessage();
   const router = useRouter();
-  const filterId = useId();
 
-  const [patientId, setPatientId] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState<EntryType | "">("");
   const [retryToken, setRetryToken] = useState(0);
   const [state, setState] = useState<LoadState>({ status: "loading" });
 
-  // Resolve the current patient id once — the entries endpoint is nested
-  // under it (docs/api-conventions.md: entries are meaningless without a
-  // patient).
   useEffect(() => {
     let active = true;
-    api
-      .get<{ id: string }>("/patients/me")
-      .then((profile) => {
-        if (active) setPatientId(profile.id);
-      })
-      .catch((err) => {
-        if (!active) return;
-        if (err instanceof ApiError && (err.status === 401 || err.code === "SESSION_EXPIRED")) {
-          router.replace("/login");
-          return;
-        }
-        if (err instanceof ApiError && err.status === 404) {
-          setState({ status: "notFound" });
-          return;
-        }
-        setState({ status: "error", message: errorMessage(err) });
-      });
-    return () => {
-      active = false;
-    };
-    // errorMessage / router are stable for the page lifetime.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Fetch (or re-fetch) the first page whenever the patient id, the type
-  // filter, or an explicit retry changes. Inlined rather than built from a
-  // `useCallback` — `errorMessage` is a fresh function every render, so a
-  // memoized wrapper depending on it would itself change identity every
-  // render and re-trigger this effect in a loop that never settles.
-  useEffect(() => {
-    if (!patientId) return;
-    let active = true;
-    // Deferred one microtask so the reset is a callback, not a direct
-    // synchronous setState in the effect body (react-hooks/set-state-in-effect).
     Promise.resolve().then(() => {
       if (active) setState({ status: "loading" });
     });
@@ -142,6 +112,13 @@ export default function TimelinePage() {
           router.replace("/login");
           return;
         }
+        // Consent-denied and "no such patient" are the same 404 from the
+        // backend — rendered as the same notFound state, deliberately with
+        // no branch that distinguishes them.
+        if (err instanceof ApiError && err.status === 404) {
+          setState({ status: "notFound" });
+          return;
+        }
         setState({ status: "error", message: errorMessage(err) });
       });
     return () => {
@@ -152,7 +129,7 @@ export default function TimelinePage() {
   }, [patientId, typeFilter, retryToken]);
 
   function loadMore() {
-    if (!patientId || state.status !== "ready" || !state.nextCursor) return;
+    if (state.status !== "ready" || !state.nextCursor) return;
     const cursor = state.nextCursor;
     setState({ ...state, loadingMore: true, loadMoreError: null });
     api
@@ -181,31 +158,21 @@ export default function TimelinePage() {
 
   return (
     <section className="space-y-6">
-      {patientId && <BreakGlassBanner patientId={patientId} />}
-
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold text-foreground">{t("title")}</h1>
-          <p className="text-sm text-muted">{t("subtitle")}</p>
-        </div>
-        <Link
-          href="/timeline/new"
-          className="shrink-0 text-sm font-medium text-accent-text underline"
-        >
-          {t("fileNewEntry")}
-        </Link>
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold text-foreground">{t("title")}</h1>
+        <p className="text-sm text-muted">{t("subtitle")}</p>
       </div>
 
       <div className="max-w-xs space-y-1.5">
-        <Label htmlFor={filterId}>{t("filter.label")}</Label>
+        <Label htmlFor="clinician-entry-type-filter">{tTimeline("filter.label")}</Label>
         <Select
-          id={filterId}
+          id="clinician-entry-type-filter"
           value={typeFilter || ALL_TYPES}
           onValueChange={(value) => setTypeFilter(value === ALL_TYPES ? "" : (value as EntryType))}
-          placeholder={t("filter.label")}
+          placeholder={tTimeline("filter.label")}
           options={[
-            { value: ALL_TYPES, label: t("filter.all") },
-            ...ENTRY_TYPES.map((type) => ({ value: type, label: t(`entryTypes.${type}`) })),
+            { value: ALL_TYPES, label: tTimeline("filter.all") },
+            ...ENTRY_TYPES.map((type) => ({ value: type, label: tTimeline(`entryTypes.${type}`) })),
           ]}
         />
       </div>
@@ -213,8 +180,8 @@ export default function TimelinePage() {
       {state.status === "loading" && <p className="text-sm text-muted">{t("loading")}</p>}
 
       {state.status === "notFound" && (
-        <Callout tone="info" iconLabel={t("title")}>
-          {t("notFound")}
+        <Callout tone="info" iconLabel={t("notFound.title")}>
+          {t("notFound.body")}
         </Callout>
       )}
 
@@ -223,16 +190,17 @@ export default function TimelinePage() {
           <Callout tone="error" iconLabel={t("error.title")}>
             {state.message}
           </Callout>
-          {patientId && (
-            <Button variant="secondary" onClick={() => setRetryToken((n) => n + 1)}>
-              {t("error.retry")}
-            </Button>
-          )}
+          <Button variant="secondary" onClick={() => setRetryToken((n) => n + 1)}>
+            {t("error.retry")}
+          </Button>
         </div>
       )}
 
       {state.status === "ready" && state.items.length === 0 && (
-        <EmptyState typeFilter={typeFilter} />
+        <Callout tone="info" iconLabel={t("empty.title")}>
+          <span className="block font-medium text-foreground">{t("empty.title")}</span>
+          <span>{t("empty.body")}</span>
+        </Callout>
       )}
 
       {state.status === "ready" && state.items.length > 0 && (
@@ -242,7 +210,7 @@ export default function TimelinePage() {
               <h2 className="text-sm font-semibold text-muted">{formatDate(group.date)}</h2>
               <ul className="space-y-2">
                 {group.rows.map((entry) => (
-                  <EntryRow key={entry.id} entry={entry} />
+                  <EntryRow key={entry.id} entry={entry} patientId={patientId} />
                 ))}
               </ul>
             </div>
@@ -265,33 +233,14 @@ export default function TimelinePage() {
   );
 }
 
-// Distinct from the load-failure Callout above: "no entries" is a clean
-// server response with `items: []`, not an error. A type filter narrows the
-// message to that type specifically (issue #33 scope).
-function EmptyState({ typeFilter }: { typeFilter: EntryType | "" }) {
-  const t = useTranslations("timeline");
-  const title = typeFilter
-    ? t("emptyFiltered.title", { type: t(`entryTypes.${typeFilter}`) })
-    : t("empty.title");
-  const body = typeFilter
-    ? t("emptyFiltered.body", { type: t(`entryTypes.${typeFilter}`) })
-    : t("empty.body");
-  return (
-    <Callout tone="info" iconLabel={title}>
-      <span className="block font-medium text-foreground">{title}</span>
-      <span>{body}</span>
-    </Callout>
-  );
-}
-
-function EntryRow({ entry }: { entry: EntrySummary }) {
+function EntryRow({ entry, patientId }: { entry: EntrySummary; patientId: string }) {
   const t = useTranslations("timeline");
   const Icon = ENTRY_ICONS[entry.entryType];
 
   return (
     <li>
       <Link
-        href={`/timeline/${entry.id}`}
+        href={`/patients/${patientId}/records/${entry.id}`}
         className="flex items-start gap-3 rounded-md border border-border bg-surface px-4 py-3 outline-none hover:bg-surface-raised focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
       >
         <Icon className="mt-0.5 size-5 shrink-0 text-muted" />

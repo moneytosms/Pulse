@@ -17,6 +17,7 @@
   "ENTRY_ALREADY_SUPERSEDED": "इस प्रविष्टि को पहले ही सुधारा जा चुका है।",
   "UNSUPPORTED_MEDIA_TYPE": "केवल PDF, PNG और JPEG दस्तावेज़ स्वीकार किए जाते हैं।",
   "PAYLOAD_TOO_LARGE": "यह फ़ाइल बहुत बड़ी है — इसे संपीड़ित करें या विभाजित करें और फिर से प्रयास करें।",
+  "CONSENT_EXPIRY_OUT_OF_RANGE": "आज से 1 दिन और 1 वर्ष के बीच की समाप्ति तिथि चुनें।",
   "fieldErrors": {
     "missing": "यह फ़ील्ड आवश्यक है।",
     "string_type": "एक मान्य मान दर्ज करें।",

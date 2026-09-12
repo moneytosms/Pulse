@@ -3,7 +3,6 @@
 import { use, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { BreakGlassBanner } from "@/components/BreakGlassBanner";
 import { Callout } from "@/components/ui/Callout";
 import { ClinicalText } from "@/components/ClinicalText";
 import { DocumentViewer } from "@/components/DocumentViewer";
@@ -20,6 +19,11 @@ import { useApiErrorMessage } from "@/lib/errors";
 import { formatDate } from "@/lib/format";
 import type { EntryDetail, EntryType } from "@/lib/records";
 
+// Clinician-facing entry detail, mirroring `timeline/[entryId]/page.tsx`
+// against the same `/entries/{entryId}` endpoint. The notFound branch below
+// is deliberately the *only* failure rendering: a consent-denied read and a
+// nonexistent entry are the same backend 404 (clinical-safety.md) and must
+// look identical here too — no message ever says "you don't have consent".
 const ENTRY_ICONS: Record<EntryType, typeof DiagnosisIcon> = {
   DIAGNOSIS: DiagnosisIcon,
   PRESCRIPTION: PrescriptionIcon,
@@ -28,12 +32,6 @@ const ENTRY_ICONS: Record<EntryType, typeof DiagnosisIcon> = {
   CLINICAL_NOTE: ClinicalNoteIcon,
 };
 
-/**
- * "H"/"L" out-of-range flag for a Lab Report. One alert hue (critical/red),
- * never red-versus-green — direction is carried by the ▲/▼ glyph, the
- * letter and the words, not by colour (docs/design-direction.md: "High
- * versus low lab values must not be red versus green").
- */
 function labFlag(entry: EntryDetail): "high" | "low" | null {
   if (entry.entryType !== "LAB_REPORT" || entry.valueNumeric == null) return null;
   if (entry.referenceHigh != null && entry.valueNumeric > entry.referenceHigh) return "high";
@@ -59,21 +57,20 @@ type LoadState =
   | { status: "error"; message: string }
   | { status: "ready"; entry: EntryDetail };
 
-export default function EntryDetailPage({
+export default function ClinicianEntryDetailPage({
   params,
 }: {
-  params: Promise<{ entryId: string }>;
+  params: Promise<{ patientId: string; entryId: string }>;
 }) {
-  const { entryId } = use(params);
+  const { patientId, entryId } = use(params);
   const t = useTranslations("timeline");
+  const tClinician = useTranslations("clinicianRecords");
   const errorMessage = useApiErrorMessage();
   const router = useRouter();
   const [state, setState] = useState<LoadState>({ status: "loading" });
 
   useEffect(() => {
     let active = true;
-    // Deferred one microtask so the reset is a callback, not a direct
-    // synchronous setState in the effect body (react-hooks/set-state-in-effect).
     Promise.resolve().then(() => {
       if (active) setState({ status: "loading" });
     });
@@ -103,30 +100,28 @@ export default function EntryDetailPage({
 
   return (
     <section className="space-y-6">
-      <Link href="/timeline" className="text-sm font-medium text-accent-text underline">
-        {t("detail.back")}
+      <Link
+        href={`/patients/${patientId}/records`}
+        className="text-sm font-medium text-accent-text underline"
+      >
+        {tClinician("detail.back")}
       </Link>
 
       {state.status === "loading" && <p className="text-sm text-muted">{t("loading")}</p>}
 
       {state.status === "notFound" && (
-        <Callout tone="info" iconLabel={t("detail.title")}>
-          {t("detail.notFound")}
+        <Callout tone="info" iconLabel={tClinician("notFound.title")}>
+          {tClinician("notFound.body")}
         </Callout>
       )}
 
       {state.status === "error" && (
-        <Callout tone="error" iconLabel={t("error.title")}>
+        <Callout tone="error" iconLabel={tClinician("error.title")}>
           {state.message}
         </Callout>
       )}
 
-      {state.status === "ready" && (
-        <>
-          <BreakGlassBanner patientId={state.entry.patientId} />
-          <EntryDetailView entry={state.entry} />
-        </>
-      )}
+      {state.status === "ready" && <EntryDetailView entry={state.entry} patientId={patientId} />}
     </section>
   );
 }
@@ -140,7 +135,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function EntryDetailView({ entry }: { entry: EntryDetail }) {
+function EntryDetailView({ entry, patientId }: { entry: EntryDetail; patientId: string }) {
   const t = useTranslations("timeline");
   const Icon = ENTRY_ICONS[entry.entryType];
   const f = t.raw("detail.fields") as Record<string, string>;
@@ -204,7 +199,7 @@ function EntryDetailView({ entry }: { entry: EntryDetail }) {
         <Callout tone="info" iconLabel={t("detail.title")}>
           <span>{t("detail.correctsNotice")}</span>{" "}
           <Link
-            href={`/timeline/${entry.supersedesId}`}
+            href={`/patients/${patientId}/records/${entry.supersedesId}`}
             className="font-medium underline"
           >
             {t("detail.viewPrevious")}

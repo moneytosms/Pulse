@@ -1,0 +1,44 @@
+{
+  "title": "Notifications",
+  "subtitle": "Consent and record activity on your account.",
+  "loading": "Loading your notifications…",
+  "preferencesCta": "Preferences",
+  "error": {
+    "title": "Could not load your notifications",
+    "retry": "Try again"
+  },
+  "empty": {
+    "title": "No notifications yet",
+    "body": "Nothing has come through yet."
+  },
+  "loadMore": "Load more",
+  "loadingMore": "Loading more…",
+  "list": {
+    "read": "Read",
+    "unread": "Unread",
+    "markRead": "Mark as read",
+    "marking": "Marking as read…",
+    "types": {
+      "CONSENT_GRANTED": "Consent granted",
+      "CONSENT_REVOKED": "Consent revoked",
+      "RECORD_UPLOADED": "Record uploaded",
+      "BREAK_GLASS_ACCESS": "Emergency access",
+      "DAILY_DIGEST": "Daily digest"
+    }
+  },
+  "preferences": {
+    "back": "Back to notifications",
+    "title": "Notification preferences",
+    "subtitle": "Choose how you hear about activity on your record.",
+    "loading": "Loading your preferences…",
+    "empty": {
+      "title": "No optional preferences to show",
+      "body": "Every notification type on your account is mandatory and always on."
+    },
+    "channels": {
+      "EMAIL": "Email",
+      "SMS": "SMS",
+      "IN_APP": "In-app"
+    }
+  }
+}
