@@ -4,8 +4,8 @@
 # ///
 """Start the Pulse stack: backend (with Postgres, Redis, Mailpit) healthy first, then frontend + Caddy.
 
-Usage: uv run run.py [--build]
-Extra args are passed to `docker compose up`. Ctrl+C stops following logs; containers keep running.
+Usage: uv run run.py
+Always rebuilds images (cached layers make it cheap); a stale image silently serves old code. Extra args are passed to `docker compose up`. Ctrl+C stops following logs; containers keep running.
 Stop with `docker compose down`.
 """
 
@@ -23,9 +23,9 @@ def compose(*args: str) -> None:
 
 try:
     print("[run] backend (migrate + seed on first boot)...")
-    compose("up", "-d", "--wait", *extra, "backend", "mailpit")
+    compose("up", "-d", "--wait", "--build", *extra, "backend", "mailpit")
     print("[run] frontend + caddy...")
-    compose("up", "-d", "--wait", *extra, "frontend", "caddy")
+    compose("up", "-d", "--wait", "--build", *extra, "frontend", "caddy")
     print("[run] up: app http://localhost  |  mail http://localhost:8025")
     compose("logs", "-f", "--tail", "20", "backend", "frontend")
 except subprocess.CalledProcessError as e:
