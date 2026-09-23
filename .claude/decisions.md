@@ -122,3 +122,15 @@ Context: P4.3 needed to flag lab results as abnormal, on top of the P4.2 analyti
 Options: a hardcoded per-test-name "normal range" table in application code; per-row `reference_low`/`reference_high` comparison, as `database.md` already required for lab results.
 Chosen: per-row comparison against the columns the record was seeded with.
 Rejected: hardcoded ranges — a second, unauthoritative copy of clinical knowledge in Python that can silently disagree with the source lab's own reference range.
+
+## [2026-09-23] Frontend rebuilt on shadcn/ui, clinical flags keep their own tokens
+Context: Phase 4's data-dense screens (analytics, admin, duplicate review) needed tables, charts, sheets and form fields the hand-rolled kit in `components/ui/` did not have.
+Options: extend the hand-rolled kit; adopt a packaged component library; generate shadcn/ui components into the repo.
+Chosen: shadcn/ui, generated into `src/components/ui/` and themed from `globals.css`, with `next-themes` for class-based dark mode. Clinical severity (abnormal labs, critical entries) uses the project's own `--critical*` tokens, never shadcn's generic `destructive`.
+Rejected: extending the kit, which meant building the same missing primitives by hand under deadline. A packaged library, which can't be edited in place and so breaks "wrap Radix primitives once, in the shared directory" (`frontend.md`). Using `destructive` for clinical flags, which measured 3.97:1 in light mode (below WCAG AA) and reads as an error, not as a clinical finding.
+
+## [2026-09-23] Deployment is laptop Docker Compose, no always-on instance
+Context: #56 asks for the deployment call. The delivery plan assumed laptop Compose unless integration showed an always-on instance was worth it.
+Options: laptop `docker compose up --build`; a hosted always-on instance.
+Chosen: laptop Compose, started with `docker compose up --build` or `uv run run.py`. Caddy serves everything on port 80, same origin (ADR-0012).
+Rejected: an always-on instance. Nothing in integration needed one, and it would put a publicly reachable EHR-shaped system online with seeded identity data, sessions and an audit log, for a demo that runs on one machine. ADR-0003's stateless-scaling argument against Redis sessions assumes the same single-host topology.

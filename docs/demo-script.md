@@ -6,34 +6,41 @@ audit view → revoke → clinician locked out) plus a pass through Phase 4's
 analytics, admin dashboard and duplicate-review screens.
 
 **Rehearsal status:** walked through once, end to end, against `docker
-compose up --build` **on this machine's existing clone** (`/mnt/d/Projects/Pulse`,
-already checked out at the tip of `main` used for this ticket) — **not** a
-fresh `git clone` on a separate machine, and not yet rehearsed by anyone
-other than the author. Issue #56 asks for a rehearsal "on a machine that is
-not the author's" as a follow-up beyond this ticket's acceptance criteria;
-that second rehearsal has not happened and should not be assumed done.
-Every screen and button name below was checked against the actually
-running app during this rehearsal, not just against the source.
+compose up --build` on the author's existing clone, before the shadcn/ui
+rebuild (PR #59). **Not** yet re-rehearsed against the rebuilt UI, **not**
+on a fresh `git clone`, and not by anyone other than the author. Issue #56
+asks for a rehearsal on a machine that is not the author's; that has not
+happened and should not be assumed done.
+
+Screen names, labels and buttons below were re-checked on 2026-09-23
+against the English catalogs (`frontend/src/i18n/messages/en/`) at the
+post-#59 tree. That is a check against the source, not a live rehearsal.
 
 ## Setup (before the audience is in the room)
 
 ```bash
 git clone https://github.com/moneytosms/Pulse.git   # or cd into an existing clone
 cd Pulse
-docker compose up --build
+docker compose up --build      # or: uv run run.py  (backend healthy first, then frontend)
 ```
+
+Always pass `--build`. Without it, Compose reuses whatever image already
+exists, and an old frontend image serves an old build: the landing page
+loads but every other route 404s. `run.py` always builds.
 
 Wait for all six containers healthy (`docker compose ps`). First boot runs
 migrations and seeds identity data automatically — no separate seed step.
 
-- App: `http://localhost`
+- App: `http://localhost` (Caddy, port 80). Port 3000 is not published to
+  the host by design (ADR-0012): the browser must reach `/api` on the same
+  origin.
 - Mailpit inbox (verification emails): `http://localhost:8025`
 
-**Gap closed.** `seed/data/identity/users.csv` now seeds an `ADMINISTRATOR`
-row (`admin0@example.com`, `Pulse@demo1`, `demo_login=1`) alongside
-`CLINICIAN`, `PATIENT` and `PROVIDER_STAFF` — it has its own quick-login
-button ("Administrator") on `/en/login`, no hand-promotion needed. No
-Patient row attached, by construction (ADR-0007).
+Seeded accounts all use the password `Pulse@demo1` and have quick-login
+buttons on `/en/login`: **Patient (EN)** (`demo.patient.en@example.com`),
+**Patient (HI)**, **Provider staff**, **Clinician**
+(`clinician0@example.com`) and **Administrator** (`admin0@example.com`).
+The Administrator has no Patient row, by construction (ADR-0007).
 
 ## Part 1 — the demo spine (#56)
 
@@ -51,8 +58,10 @@ Fathima Rasheed**, a clinician who initially has no access to her record.
    button on `/en/login` — `demo.patient.en@example.com` — to skip ahead
    with a patient who already has history).
 
-3. **Upload.** Go to `/en/timeline/new`. File a Diagnosis entry: pick
-   "Diagnosis", set an occurred-at date/time, code system "ICD-10", code
+3. **Upload.** Copy the **Patient ID** from `/en/profile` ("Your
+   profile"); the entry form asks for it. For `demo.patient.en` it is
+   `0c96112a-1653-5403-999c-30ec1ef6dda8`. Go to `/en/timeline/new`. File
+   a Diagnosis entry: pick "Diagnosis", set "Occurred at", code system "ICD-10", code
    "E11", display name "Type 2 diabetes mellitus". Submit → "View entry".
    Say: *this is a Provider or the patient themself filing a Medical
    Entry — never editable in place after this point, only superseded.*
@@ -61,17 +70,20 @@ Fathima Rasheed**, a clinician who initially has no access to her record.
    first. Point out the entry-type filter and the "Critical" label (never
    colour alone — `frontend.md`).
 
-5. **Grant consent.** Go to `/en/consent/new`. Enter the clinician's user
-   ID (use the seeded **Clinician** account's ID — look it up via the
-   Clinician quick-login on `/en/login`, or use a known seed ID), purpose
-   "Treatment", an expiry date. Submit → "Access granted". Say: *consent
+5. **Grant consent.** Go to **Access** (`/en/consent`) → "Grant access"
+   (`/en/consent/new`). "Clinician email": `clinician0@example.com`.
+   Leave every "Entry types" box unticked to grant all types. "Purpose":
+   "Treatment". Set "Access expires". Submit → "Access granted". An
+   email that is not a registered Clinician is rejected ("No clinician is
+   registered with that email."). Say: *consent
    is granted to one named clinician, never an organisation, and it always
    has a mandatory expiry.*
 
 6. **Clinician reads the record.** Open a second (private/incognito)
    window, log in as **Clinician** (`clinician0@example.com` quick-login).
-   Go to `/en/patients/{patientId}/records`. The Diagnosis entry is
-   visible. Say: *this read is happening because of the consent grant, not
+   It lands on "Clinician access" (`/en/clinician`, nav: **Patients**).
+   Paste the Patient ID into "Patient ID" → "Open record". "Patient
+   record" lists the Diagnosis entry. Say: *this read is happening because of the consent grant, not
    because of the clinician's role — a Clinician role alone grants
    nothing.*
 
@@ -85,12 +97,17 @@ Fathima Rasheed**, a clinician who initially has no access to her record.
    "Revoke", confirm. No step-up verification is asked here — say: *this
    is deliberate; withdrawing access must be the frictionless direction.*
 
-9. **Clinician locked out.** Back in the clinician's window, reload
-   `/en/patients/{patientId}/records`. It now shows "Record not found" —
+9. **Clinician locked out.** Back in the clinician's window, reload the
+   patient record page. It now shows "Record not found" —
    the exact same message a genuinely nonexistent patient ID would
    produce. Say: *this is a 404, not a 403 — a 403 would confirm the
    record exists, which itself is sensitive information. Revocation took
    effect immediately, mid-session, because permission is never cached.*
+
+   *Optional:* the same screen offers **Emergency access** (break-glass):
+   a written justification opens the record for 60 minutes, is recorded
+   in the audit log, and the patient sees an "Emergency access to your
+   record" banner.
 
 ## Part 2 — Phase 4 screens
 
@@ -116,10 +133,11 @@ part if you started from a brand-new signup).
     queue is empty, say so plainly rather than skipping the screen —
     the seeded planted-duplicate pairs may already have been reviewed in
     an earlier session. If a candidate is present: point out that only
-    name/DOB/phone/claim-status/entry-count are shown, walk through
-    "Merge" and the resulting entry in "Merges this session", and mention
-    that a merge is reversible from that same list — but only within the
-    session that performed it (no endpoint lists past merges by ID).
+    name, date of birth, phone, account status and "Records on file" are
+    shown. Walk through "Merge", then find it under "Reversible merges",
+    which lists every unreversed merge by any administrator, across
+    sessions. "Reverse merge" moves the entries back. "Not a duplicate"
+    dismisses a candidate without merging.
 
 ## Fallback notes
 

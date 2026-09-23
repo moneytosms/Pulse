@@ -244,10 +244,10 @@ Appended as patterns land. Not written at the end.
 
 ---
 
-## Frontend redesign to a shadcn-style token system (P4.4)
+## Frontend rebuilt on shadcn/ui components (P4.4, PR #59)
 
-**What:** The frontend's component layer and CSS custom properties were rebuilt around the shadcn convention — a single `--radius` value driving the whole rounded-* scale, an accent color that stays constant across light/dark while its contrast/subtle/focus-ring variants swap per theme, and shared components (`Button`, `Card`, `Badge`, `Callout`) rebuilt once against the new tokens rather than restyled screen-by-screen.
+**What:** The hand-rolled primitives in `src/components/ui/` (`Button`, `Card`, `Callout`, `FormField`, `NavLink`, ...) and `src/styles/tokens.css` were replaced with shadcn/ui components generated into the same directory, themed from `src/app/globals.css`. Dark mode is class-based via `next-themes` (`defaultTheme="light"`, header toggle), not a media query. Project-specific tokens (`--critical`, `--critical-surface`, `--critical-border`) sit alongside shadcn's own.
 
-**Why here:** Phase 1-3 screens were built against an earlier Sand/Iris palette before Phase 4 added two data-dense screens (analytics, admin) that needed a denser, more conventional component vocabulary than the original patient-portal-first styling gave them. Rebuilding the shared components once, before the second Phase 4 screen needed them, keeps `frontend.md`'s rule intact: the same button is still built exactly once, even though the visual system underneath it changed.
+**Why here:** Phase 4 added data-dense screens (analytics, admin, duplicate review) that needed tables, charts, sheets and form fields the original kit did not have. shadcn components are copied into the repo, not imported from a package, so they are still "wrapped once, in the shared directory" (`frontend.md`) and can be edited.
 
-**Worth knowing:** Dark mode is fully redefined alongside light mode in the same pass, not left to catch up later — `frontend.md`'s theme-token rules (light on bare `:root`, dark redefined under the media query and the explicit `data-theme` selector) apply to this token rebuild the same as they would to any artifact.
+**Worth knowing:** shadcn's `destructive` colour is a generic error red, not a clinical-severity colour, and its `Badge` variant measured **3.97:1** in light mode, below WCAG AA's 4.5:1 for 12px text. Clinical flags (abnormal lab results, critical entries) use the `--critical` tokens (5.87:1 light, 8.42:1 dark). The patient-side abnormal marker drifted to `variant="destructive"` during the rebuild and was moved back in P4.5. Check contrast by computing ratios from resolved colours in the running app, not by eye.

@@ -24,8 +24,12 @@ Administrator (`admin0@example.com`) landed in that commit — this doc does
 ```bash
 git clone https://github.com/moneytosms/Pulse.git
 cd Pulse
-docker compose up --build
+docker compose up --build      # or: uv run run.py  (backend healthy first, then frontend)
 ```
+
+Always pass `--build`: without it Compose reuses an existing image, and a
+stale frontend image serves the landing page while every other route 404s.
+The app is on port 80 via Caddy; port 3000 is not published to the host.
 
 Wait for all six containers healthy:
 
@@ -151,7 +155,7 @@ label *and* an icon (never colour alone, per `frontend.md`).
 
 ### 5.5 Grant consent — `/en/consent/new`
 
-- **Grantee user ID**: `44e4531e-4149-513f-95d5-343a942af00b` (seeded Clinician, `clinician0@example.com`)
+- **Clinician email**: `clinician0@example.com` (seeded Clinician). An email that is not a registered Clinician is rejected
 - **Entry types**: leave every checkbox unticked to grant all types (ticking is a filter, not a whitelist you must complete — unticked means "no filter" on the wire)
 - **From / To date**: optional — leave blank for no date window
 - **Purpose**: `Treatment` (or `Second opinion` / `Other` — if Other, a free-text **Purpose (other)** field appears)
@@ -209,8 +213,9 @@ Still as Administrator. Seeded planted pairs
 duplicates (token-order-swap, DOB-typo, initials-vs-expanded variants)
 plus 2 near-miss siblings that should **not** merge. If empty, an earlier
 session already reviewed everything — that's expected, say so rather than
-treating it as broken. "Merge" is reversible, but only within the session
-that performed it.
+treating it as broken. "Merge" is reversible: every unreversed merge, by any
+administrator, is listed under "Reversible merges" with a "Reverse merge"
+button, across sessions.
 
 ### 5.13 Notifications — `/en/notifications` and `/en/notifications/preferences`
 
