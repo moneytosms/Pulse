@@ -13,7 +13,7 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0
       # --group dev pulls pytest, httpx and the testcontainers extras.
       - run: uv sync --group dev
       - run: uv run ruff check .
