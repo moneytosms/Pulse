@@ -3,7 +3,9 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
-import { Callout } from "@/components/ui/Callout";
+import { CircleAlertIcon, CircleCheckIcon, InfoIcon } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
 import { api, ApiError } from "@/lib/api";
 
@@ -33,38 +35,42 @@ function Verify() {
       });
   }, [challengeId, token]);
 
-  const body: Record<State, { tone: "info" | "success" | "error"; text: string }> = {
-    checking: { tone: "info", text: t("verify.checking") },
-    success: { tone: "success", text: t("verify.success") },
-    expired: { tone: "error", text: t("verify.expired") },
-    failed: { tone: "error", text: t("verify.failed") },
-    missing: { tone: "error", text: t("verify.missingParams") },
+  const body: Record<
+    State,
+    { variant: "default" | "destructive"; icon: typeof InfoIcon; text: string }
+  > = {
+    checking: { variant: "default", icon: InfoIcon, text: t("verify.checking") },
+    success: { variant: "default", icon: CircleCheckIcon, text: t("verify.success") },
+    expired: { variant: "destructive", icon: CircleAlertIcon, text: t("verify.expired") },
+    failed: { variant: "destructive", icon: CircleAlertIcon, text: t("verify.failed") },
+    missing: { variant: "destructive", icon: CircleAlertIcon, text: t("verify.missingParams") },
   };
   const current = body[state];
+  const Icon = current.icon;
 
   return (
-    <section className="mx-auto max-w-sm space-y-6">
+    <section className="animate-in fade-in-0 slide-in-from-bottom-1 mx-auto max-w-sm space-y-6 duration-300 motion-reduce:animate-none">
       <h1 className="text-2xl font-bold text-foreground">{t("verify.title")}</h1>
 
-      <Callout tone={current.tone} iconLabel={t("verify.title")}>
-        {current.text}
-      </Callout>
+      <Alert
+        variant={current.variant}
+        className={state === "success" ? "border-consent-active/40 text-consent-active" : undefined}
+      >
+        <Icon />
+        <AlertDescription className={state === "success" ? "text-consent-active" : undefined}>
+          {current.text}
+        </AlertDescription>
+      </Alert>
 
       {state === "success" && (
-        <Link
-          href="/login"
-          className="inline-flex min-h-11 w-full items-center justify-center rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-contrast shadow-sm transition-colors hover:bg-accent-hover"
-        >
-          {t("verify.continue")}
-        </Link>
+        <Button asChild className="h-11 w-full">
+          <Link href="/login">{t("verify.continue")}</Link>
+        </Button>
       )}
       {(state === "expired" || state === "missing") && (
-        <Link
-          href="/verify-pending"
-          className="inline-flex min-h-11 w-full items-center justify-center rounded-md border border-border-strong bg-surface px-4 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-surface-raised"
-        >
-          {t("verifyPending.resend")}
-        </Link>
+        <Button asChild variant="outline" className="h-11 w-full">
+          <Link href="/verify-pending">{t("verifyPending.resend")}</Link>
+        </Button>
       )}
     </section>
   );

@@ -38,5 +38,22 @@
     "submit": "Submit",
     "retry": "Try again",
     "loading": "Loading…"
+  },
+  "nav": {
+    "label": "Main",
+    "timeline": "Timeline",
+    "consent": "Access",
+    "audit": "Access log",
+    "notifications": "Notifications",
+    "analytics": "Analytics",
+    "profile": "Profile",
+    "patients": "Patients",
+    "admin": "Admin",
+    "duplicates": "Duplicates",
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "openMenu": "Open menu",
+    "toggleTheme": "Toggle theme",
+    "account": "Account"
   }
 }

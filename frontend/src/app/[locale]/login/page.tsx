@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button } from "@/components/ui/Button";
-import { Callout } from "@/components/ui/Callout";
-import { Card, CardContent } from "@/components/ui/Card";
-import { FormField } from "@/components/ui/FormField";
-import { InlineLink } from "@/components/ui/InlineLink";
-import { Input } from "@/components/ui/Input";
-import { useRouter } from "@/i18n/navigation";
+import { TriangleAlertIcon } from "lucide-react";
+import { Alert, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { Link, useRouter } from "@/i18n/navigation";
 import { api } from "@/lib/api";
 import type { Me } from "@/lib/auth";
 import { useApiErrorMessage } from "@/lib/errors";
@@ -34,6 +35,13 @@ export default function LoginPage() {
   const errorMessage = useApiErrorMessage();
   const router = useRouter();
 
+  const emailId = useId();
+  const emailErrorId = useId();
+  const passwordId = useId();
+  const passwordErrorId = useId();
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -49,7 +57,10 @@ export default function LoginPage() {
     else if (!EMAIL_RE.test(email)) next.email = t("validation.emailInvalid");
     if (!password) next.password = t("validation.passwordRequired");
     setErrors(next);
-    if (Object.keys(next).length > 0) return;
+    if (Object.keys(next).length > 0) {
+      (next.email ? emailRef : passwordRef).current?.focus();
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -84,88 +95,100 @@ export default function LoginPage() {
   }
 
   return (
-    <section className="auth-wash mx-auto max-w-sm space-y-6 rounded-3xl p-4 sm:p-6">
-      <div className="space-y-1 text-center">
-        <h1 className="text-2xl font-bold text-foreground">{t("login.title")}</h1>
-      </div>
+    <section className="animate-in fade-in-0 slide-in-from-bottom-1 mx-auto grid max-w-sm gap-6 place-items-center py-6 duration-300 motion-reduce:animate-none sm:py-12">
+      <Card className="w-full">
+        <CardHeader className="text-center">
+          {/* CardTitle renders a <div>; the accessible-heading role here matters
+              (e2e selects by role), so this is a plain <h1> with matching type
+              styles rather than <CardTitle>. */}
+          <h1 className="text-2xl leading-snug font-semibold">{t("login.title")}</h1>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {formError && (
+            <Alert variant="destructive">
+              <TriangleAlertIcon />
+              <AlertTitle>{formError}</AlertTitle>
+            </Alert>
+          )}
 
-      {formError && (
-        <Callout tone="error" iconLabel={t("login.title")}>
-          {formError}
-        </Callout>
-      )}
-
-      <Card>
-        <CardContent className="space-y-4 pt-5">
           <form onSubmit={onSubmit} noValidate className="space-y-4">
-            <FormField label={t("fields.email")} error={errors.email}>
-              {(props) => (
-                <Input
-                  {...props}
-                  type="email"
-                  autoComplete="email"
-                  inputMode="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              )}
-            </FormField>
+            <Field data-invalid={!!errors.email || undefined}>
+              <FieldLabel htmlFor={emailId}>{t("fields.email")}</FieldLabel>
+              <Input
+                ref={emailRef}
+                id={emailId}
+                type="email"
+                autoComplete="email"
+                inputMode="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                aria-invalid={!!errors.email}
+                aria-describedby={errors.email ? emailErrorId : undefined}
+              />
+              {errors.email && <FieldError id={emailErrorId}>{errors.email}</FieldError>}
+            </Field>
 
-            <FormField label={t("fields.password")} error={errors.password}>
-              {(props) => (
-                <Input
-                  {...props}
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              )}
-            </FormField>
+            <Field data-invalid={!!errors.password || undefined}>
+              <FieldLabel htmlFor={passwordId}>{t("fields.password")}</FieldLabel>
+              <Input
+                ref={passwordRef}
+                id={passwordId}
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                aria-invalid={!!errors.password}
+                aria-describedby={errors.password ? passwordErrorId : undefined}
+              />
+              {errors.password && <FieldError id={passwordErrorId}>{errors.password}</FieldError>}
+            </Field>
 
-            <Button type="submit" loading={submitting} className="w-full">
+            <Button type="submit" disabled={submitting} aria-busy={submitting} className="h-11 w-full">
+              {submitting && <Spinner />}
               {t("login.submit")}
             </Button>
           </form>
-
-          <p className="text-sm text-muted">
-            {t("login.noAccount")}{" "}
-            <InlineLink href="/register">{t("login.registerLink")}</InlineLink>
-          </p>
         </CardContent>
+        <CardFooter>
+          <CardDescription>
+            {t("login.noAccount")}{" "}
+            <Link href="/register" className="font-medium text-primary underline-offset-4 hover:underline">
+              {t("login.registerLink")}
+            </Link>
+          </CardDescription>
+        </CardFooter>
       </Card>
 
-      {/* Demo affordance only — deliberately styled apart from the real
-          login card above (dashed border, muted surface) so it never reads
-          as part of production auth. Buttons only prefill the real form's
-          fields; submission still goes through normal validation and
-          `/auth/login`, never bypassed. */}
-      <div className="space-y-3 rounded-xl border border-dashed border-border-strong bg-surface-raised p-4">
-        <div className="space-y-0.5">
-          <p className="text-xs font-semibold tracking-wide text-muted uppercase">
+      {/* Demo affordance only — deliberately a separate, secondary card so it
+          never reads as part of production auth. Buttons only prefill the
+          real form's fields; submission still goes through normal validation
+          and `/auth/login`, never bypassed. */}
+      <Card className="w-full border-dashed">
+        <CardHeader>
+          <CardTitle className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
             Demo credentials
-          </p>
-          <p className="text-xs text-muted">
+          </CardTitle>
+          <CardDescription>
             Seeded accounts from the demo dataset — password is the same for all.
-          </p>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-2 sm:grid-cols-2">
           {DEMO_ACCOUNTS.map((account) => (
             <Button
               key={account.email}
               type="button"
-              variant={account.role === "Administrator" ? "soft" : "secondary"}
-              className="min-h-9 flex-col items-start gap-0 py-1.5 text-left"
+              variant="outline"
+              className="h-auto min-h-11 w-full min-w-0 flex-col items-start gap-0 py-1.5 text-left"
               onClick={() => fillDemo(account)}
             >
               <span className="text-xs font-semibold text-foreground">{account.role}</span>
-              <span className="truncate text-[11px] font-normal text-muted">
+              <span className="w-full truncate text-[11px] font-normal text-muted-foreground">
                 {account.email}
               </span>
             </Button>
           ))}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </section>
   );
 }

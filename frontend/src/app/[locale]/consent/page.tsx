@@ -2,11 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button } from "@/components/ui/Button";
-import { Callout } from "@/components/ui/Callout";
-import { CheckCircleIcon, ClockIcon, XCircleIcon } from "@/components/ui/icons";
-import { NavLink } from "@/components/ui/NavLink";
-import { useRouter } from "@/i18n/navigation";
+import { CircleCheckIcon, CircleXIcon, ClockIcon, ShieldCheckIcon } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
+import { Link, useRouter } from "@/i18n/navigation";
 import { api, ApiError } from "@/lib/api";
 import type { Consent, ConsentStatus, RevocationRequest } from "@/lib/consent";
 import { useApiErrorMessage } from "@/lib/errors";
@@ -15,16 +20,16 @@ import type { Page } from "@/lib/records";
 
 // Icon + label per status — colour never carries meaning alone
 // (.claude/rules/frontend.md).
-const STATUS_ICONS: Record<ConsentStatus, typeof CheckCircleIcon> = {
-  ACTIVE: CheckCircleIcon,
-  REVOKED: XCircleIcon,
+const STATUS_ICONS: Record<ConsentStatus, typeof CircleCheckIcon> = {
+  ACTIVE: CircleCheckIcon,
+  REVOKED: CircleXIcon,
   EXPIRED: ClockIcon,
 };
 
 const STATUS_CLASSES: Record<ConsentStatus, string> = {
   ACTIVE: "border-consent-active bg-consent-active-surface text-consent-active",
   REVOKED: "border-critical-border bg-critical-surface text-consent-revoked",
-  EXPIRED: "border-border-strong bg-consent-expired-surface text-consent-expired",
+  EXPIRED: "border-border bg-consent-expired-surface text-consent-expired",
 };
 
 const LIMIT = 20;
@@ -45,12 +50,23 @@ function StatusBadge({ status }: { status: ConsentStatus }) {
   const t = useTranslations("consent");
   const Icon = STATUS_ICONS[status];
   return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_CLASSES[status]}`}
-    >
+    <Badge variant="outline" className={STATUS_CLASSES[status]}>
       <Icon className="size-3.5" />
       {t(`list.status.${status}`)}
-    </span>
+    </Badge>
+  );
+}
+
+function ConsentRowLeadIcon({ status }: { status: ConsentStatus }) {
+  return (
+    <div
+      className={
+        "flex size-9 shrink-0 items-center justify-center rounded-md " +
+        (status === "ACTIVE" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")
+      }
+    >
+      <ShieldCheckIcon className="size-4" />
+    </div>
   );
 }
 
@@ -97,7 +113,11 @@ function RevokeControl({
 
   if (!confirming) {
     return (
-      <Button variant="secondary" onClick={() => setConfirming(true)} className="shrink-0">
+      <Button
+        variant="outline"
+        onClick={() => setConfirming(true)}
+        className="min-h-11 shrink-0 sm:min-h-8"
+      >
         {t("list.revoke.action")}
       </Button>
     );
@@ -121,31 +141,40 @@ function RevokeControl({
   }
 
   return (
-    <div className="w-full space-y-2 rounded-xl border border-border-strong bg-surface-raised p-4 shadow-sm sm:w-72">
+    <div className="w-full space-y-2 rounded-xl border bg-muted p-4 shadow-sm sm:w-72">
       <p className="text-sm font-medium text-foreground">{t("list.revoke.confirmTitle")}</p>
-      <p className="text-xs text-muted">{t("list.revoke.confirmBody")}</p>
-      <label className="block space-y-1 text-xs text-muted">
-        {t("list.revoke.reasonLabel")}
-        <input
+      <p className="text-xs text-muted-foreground">{t("list.revoke.confirmBody")}</p>
+      <div className="space-y-1">
+        <Label htmlFor={`revoke-reason-${consent.id}`} className="text-xs text-muted-foreground">
+          {t("list.revoke.reasonLabel")}
+        </Label>
+        <Input
+          id={`revoke-reason-${consent.id}`}
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          className="block w-full rounded-md border border-border-strong bg-surface px-2 py-1.5 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
         />
-      </label>
+      </div>
       {error && (
-        <Callout tone="error" iconLabel={t("list.revoke.action")}>
-          {error}
-        </Callout>
+        <Alert variant="destructive">
+          <AlertTitle>{t("list.revoke.action")}</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
       <div className="flex gap-2">
-        <Button loading={submitting} onClick={confirmRevoke} className="flex-1">
+        <Button
+          disabled={submitting}
+          aria-busy={submitting}
+          onClick={confirmRevoke}
+          className="min-h-11 flex-1 sm:min-h-8"
+        >
+          {submitting && <Spinner />}
           {submitting ? t("list.revoke.revoking") : t("list.revoke.confirm")}
         </Button>
         <Button
-          variant="secondary"
+          variant="outline"
           onClick={() => setConfirming(false)}
           disabled={submitting}
-          className="flex-1"
+          className="min-h-11 flex-1 sm:min-h-8"
         >
           {t("list.revoke.cancel")}
         </Button>
@@ -166,35 +195,38 @@ function ConsentRow({
   const { types, window } = scopeSummary(consent, t, tTimeline);
 
   return (
-    <li className="space-y-3 rounded-xl border border-border bg-surface shadow-sm px-4 py-3">
+    <li className="space-y-3 rounded-xl border bg-card px-4 py-3 shadow-sm transition-colors hover:bg-muted/50">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm font-medium text-foreground">
-          {consent.granteeName ?? consent.granteeUserId}
-        </span>
+        <div className="flex items-center gap-3">
+          <ConsentRowLeadIcon status={consent.status} />
+          <span className="text-sm font-medium text-foreground">
+            {consent.granteeName ?? consent.granteeUserId}
+          </span>
+        </div>
         <StatusBadge status={consent.status} />
       </div>
 
       <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-2">
         <div>
-          <dt className="text-xs text-muted">{t("list.fields.purpose")}</dt>
+          <dt className="text-xs text-muted-foreground">{t("list.fields.purpose")}</dt>
           <dd className="text-foreground">
             {t(`list.purpose.${consent.purpose}`)}
             {consent.purpose === "OTHER" && consent.purposeText ? ` — ${consent.purposeText}` : ""}
           </dd>
         </div>
         <div>
-          <dt className="text-xs text-muted">{t("list.fields.scope")}</dt>
+          <dt className="text-xs text-muted-foreground">{t("list.fields.scope")}</dt>
           <dd className="text-foreground">
             {types}
-            <span className="text-muted"> · {window}</span>
+            <span className="text-muted-foreground"> · {window}</span>
           </dd>
         </div>
         <div>
-          <dt className="text-xs text-muted">{t("list.fields.granted")}</dt>
+          <dt className="text-xs text-muted-foreground">{t("list.fields.granted")}</dt>
           <dd className="text-foreground">{formatDate(consent.grantedAt)}</dd>
         </div>
         <div>
-          <dt className="text-xs text-muted">
+          <dt className="text-xs text-muted-foreground">
             {consent.status === "REVOKED" ? t("list.fields.revokedAt") : t("list.fields.expires")}
           </dt>
           <dd className="text-foreground">
@@ -324,38 +356,54 @@ export default function ConsentListPage() {
   }
 
   return (
-    <section className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
+    <section className="animate-in fade-in-0 slide-in-from-bottom-1 motion-reduce:animate-none space-y-8 duration-300">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold text-foreground">{t("list.title")}</h1>
-          <p className="text-sm text-muted">{t("list.subtitle")}</p>
+          <h1 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
+            {t("list.title")}
+          </h1>
+          <p className="text-pretty text-sm text-muted-foreground">{t("list.subtitle")}</p>
         </div>
-        <NavLink href="/consent/new" className="shrink-0" icon="forward">
-          {t("list.grantCta")}
-        </NavLink>
+        <Button asChild className="min-h-11 shrink-0 sm:min-h-8">
+          <Link href="/consent/new">{t("list.grantCta")}</Link>
+        </Button>
       </div>
 
       {revokedNotice && (
-        <Callout tone="success" iconLabel={t("list.revoke.action")}>
-          {t("list.revoke.success")}
-        </Callout>
+        <Alert className="border-consent-active/40 text-consent-active">
+          <CircleCheckIcon />
+          <AlertTitle>{t("list.revoke.success")}</AlertTitle>
+        </Alert>
       )}
 
-      {state.status === "loading" && <p className="text-sm text-muted">{t("list.loading")}</p>}
+      {state.status === "loading" && (
+        <div className="space-y-3" aria-hidden="true">
+          <span className="sr-only">{t("list.loading")}</span>
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-24 w-full rounded-xl" />
+          ))}
+        </div>
+      )}
 
       {state.status === "notFound" && (
-        <Callout tone="info" iconLabel={t("list.title")}>
-          {t("list.notFound")}
-        </Callout>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <ShieldCheckIcon />
+            </EmptyMedia>
+            <EmptyTitle>{t("list.notFound")}</EmptyTitle>
+          </EmptyHeader>
+        </Empty>
       )}
 
       {state.status === "error" && (
         <div className="space-y-3">
-          <Callout tone="error" iconLabel={t("list.error.title")}>
-            {state.message}
-          </Callout>
+          <Alert variant="destructive">
+            <AlertTitle>{t("list.error.title")}</AlertTitle>
+            <AlertDescription>{state.message}</AlertDescription>
+          </Alert>
           {patientId && (
-            <Button variant="secondary" onClick={() => setRetryToken((n) => n + 1)}>
+            <Button variant="outline" onClick={() => setRetryToken((n) => n + 1)}>
               {t("list.error.retry")}
             </Button>
           )}
@@ -363,10 +411,20 @@ export default function ConsentListPage() {
       )}
 
       {state.status === "ready" && state.items.length === 0 && (
-        <Callout tone="info" iconLabel={t("list.empty.title")}>
-          <span className="block font-medium text-foreground">{t("list.empty.title")}</span>
-          <span>{t("list.empty.body")}</span>
-        </Callout>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <ShieldCheckIcon />
+            </EmptyMedia>
+            <EmptyTitle>{t("list.empty.title")}</EmptyTitle>
+            <EmptyDescription>{t("list.empty.body")}</EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button asChild className="min-h-11 sm:min-h-8">
+              <Link href="/consent/new">{t("list.grantCta")}</Link>
+            </Button>
+          </EmptyContent>
+        </Empty>
       )}
 
       {state.status === "ready" && state.items.length > 0 && (
@@ -378,18 +436,21 @@ export default function ConsentListPage() {
           </ul>
 
           {state.loadMoreError && (
-            <Callout tone="error" iconLabel={t("list.error.title")}>
-              {state.loadMoreError}
-            </Callout>
+            <Alert variant="destructive">
+              <AlertTitle>{t("list.error.title")}</AlertTitle>
+              <AlertDescription>{state.loadMoreError}</AlertDescription>
+            </Alert>
           )}
 
           {state.nextCursor && (
             <Button
-              variant="secondary"
-              loading={state.loadingMore}
+              variant="outline"
+              disabled={state.loadingMore}
+              aria-busy={state.loadingMore}
               onClick={loadMore}
-              className="w-full sm:w-auto"
+              className="min-h-11 w-full sm:min-h-8 sm:w-auto"
             >
+              {state.loadingMore && <Spinner />}
               {state.loadingMore ? t("list.loadingMore") : t("list.loadMore")}
             </Button>
           )}

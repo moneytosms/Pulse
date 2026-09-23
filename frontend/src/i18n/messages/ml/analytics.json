@@ -34,5 +34,11 @@
     "aboveRange": "റഫറൻസ് പരിധിക്ക് മുകളിൽ",
     "belowRange": "റഫറൻസ് പരിധിക്ക് താഴെ",
     "picker": "ലാബ് പരിശോധന"
+  },
+  "stats": {
+    "totalVisits": "മൊത്തം സന്ദർശനങ്ങൾ",
+    "activeMedications": "സജീവ മരുന്നുകൾ",
+    "labTestsTracked": "ട്രാക്ക് ചെയ്ത ലാബ് പരിശോധനകൾ",
+    "dataQualityFlags": "ഡാറ്റാ ഗുണനിലവാര കുറിപ്പുകൾ"
   }
 }

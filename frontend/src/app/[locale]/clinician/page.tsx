@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useTranslations } from "next-intl";
-import { Button } from "@/components/ui/Button";
-import { Callout } from "@/components/ui/Callout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { FormField } from "@/components/ui/FormField";
-import { Input } from "@/components/ui/Input";
+import { TriangleAlertIcon } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { useRouter } from "@/i18n/navigation";
 import { api, ApiError } from "@/lib/api";
 import type { Me } from "@/lib/auth";
@@ -31,6 +32,9 @@ export default function ClinicianHomePage() {
   const [gate, setGate] = useState<GateState>({ status: "loading" });
   const [patientId, setPatientId] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const fieldId = useId();
+  const errorId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -64,34 +68,39 @@ export default function ClinicianHomePage() {
     const trimmed = patientId.trim();
     if (!trimmed) {
       setError(t("form.validation.required"));
+      inputRef.current?.focus();
       return;
     }
     router.push(`/patients/${trimmed}/records`);
   }
 
   if (gate.status === "loading") {
-    return <p className="text-sm text-muted">{t("loading")}</p>;
+    return <p className="text-sm text-muted-foreground">{t("loading")}</p>;
   }
   if (gate.status === "denied") {
     return (
-      <Callout tone="error" iconLabel={t("gate.title")}>
-        {t("gate.denied")}
-      </Callout>
+      <Alert variant="destructive">
+        <TriangleAlertIcon />
+        <AlertTitle>{t("gate.title")}</AlertTitle>
+        <AlertDescription>{t("gate.denied")}</AlertDescription>
+      </Alert>
     );
   }
   if (gate.status === "error") {
     return (
-      <Callout tone="error" iconLabel={t("gate.title")}>
-        {t("gate.error")}
-      </Callout>
+      <Alert variant="destructive">
+        <TriangleAlertIcon />
+        <AlertTitle>{t("gate.title")}</AlertTitle>
+        <AlertDescription>{t("gate.error")}</AlertDescription>
+      </Alert>
     );
   }
 
   return (
-    <section className="mx-auto max-w-lg space-y-6">
+    <section className="mx-auto max-w-lg space-y-8 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-300">
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold text-foreground">{t("title")}</h1>
-        <p className="text-sm text-muted">{t("subtitle")}</p>
+        <h1 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">{t("title")}</h1>
+        <p className="text-pretty text-sm text-muted-foreground">{t("subtitle")}</p>
       </div>
 
       <Card>
@@ -99,22 +108,20 @@ export default function ClinicianHomePage() {
           <CardTitle>{t("form.title")}</CardTitle>
         </CardHeader>
         <CardContent>
-          {error && (
-            <Callout tone="error" iconLabel={t("form.title")}>
-              {error}
-            </Callout>
-          )}
           <form onSubmit={onSubmit} noValidate className="space-y-4">
-            <FormField label={t("form.fields.patientId")}>
-              {(props) => (
-                <Input
-                  {...props}
-                  value={patientId}
-                  onChange={(e) => setPatientId(e.target.value)}
-                  placeholder={t("form.fields.patientIdPlaceholder")}
-                />
-              )}
-            </FormField>
+            <Field data-invalid={error ? true : undefined}>
+              <FieldLabel htmlFor={fieldId}>{t("form.fields.patientId")}</FieldLabel>
+              <Input
+                ref={inputRef}
+                id={fieldId}
+                value={patientId}
+                onChange={(e) => setPatientId(e.target.value)}
+                placeholder={t("form.fields.patientIdPlaceholder")}
+                aria-invalid={error ? true : undefined}
+                aria-describedby={error ? errorId : undefined}
+              />
+              {error && <FieldError id={errorId}>{error}</FieldError>}
+            </Field>
             <Button type="submit" className="w-full">
               {t("form.submit")}
             </Button>

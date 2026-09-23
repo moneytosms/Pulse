@@ -3,19 +3,19 @@
 import { use, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { Callout } from "@/components/ui/Callout";
+import { CircleAlertIcon, FlaskConicalIcon, NotebookPenIcon, PillIcon, StethoscopeIcon, SyringeIcon } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import { ClinicalText } from "@/components/ClinicalText";
 import { DocumentViewer } from "@/components/DocumentViewer";
-import {
-  ClinicalNoteIcon,
-  DiagnosisIcon,
-  FlaskIcon,
-  PrescriptionIcon,
-  ProcedureIcon,
-} from "@/components/ui/icons";
-import { InlineLink } from "@/components/ui/InlineLink";
-import { NavLink } from "@/components/ui/NavLink";
-import { useRouter } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 import { api, ApiError } from "@/lib/api";
 import { useApiErrorMessage } from "@/lib/errors";
 import { formatDate } from "@/lib/format";
@@ -26,12 +26,12 @@ import type { EntryDetail, EntryType } from "@/lib/records";
 // is deliberately the *only* failure rendering: a consent-denied read and a
 // nonexistent entry are the same backend 404 (clinical-safety.md) and must
 // look identical here too — no message ever says "you don't have consent".
-const ENTRY_ICONS: Record<EntryType, typeof DiagnosisIcon> = {
-  DIAGNOSIS: DiagnosisIcon,
-  PRESCRIPTION: PrescriptionIcon,
-  LAB_REPORT: FlaskIcon,
-  PROCEDURE: ProcedureIcon,
-  CLINICAL_NOTE: ClinicalNoteIcon,
+const ENTRY_ICONS: Record<EntryType, typeof StethoscopeIcon> = {
+  DIAGNOSIS: StethoscopeIcon,
+  PRESCRIPTION: PillIcon,
+  LAB_REPORT: FlaskConicalIcon,
+  PROCEDURE: SyringeIcon,
+  CLINICAL_NOTE: NotebookPenIcon,
 };
 
 function labFlag(entry: EntryDetail): "high" | "low" | null {
@@ -101,23 +101,41 @@ export default function ClinicianEntryDetailPage({
   }, [entryId]);
 
   return (
-    <section className="space-y-6">
-      <NavLink href={`/patients/${patientId}/records`} icon="back">
-        {tClinician("detail.back")}
-      </NavLink>
+    <section className="space-y-8 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-300">
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href={`/patients/${patientId}/records`}>{tClinician("detail.back")}</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          {state.status === "ready" && (
+            <>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>{t(`entryTypes.${state.entry.entryType}`)}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </>
+          )}
+        </BreadcrumbList>
+      </Breadcrumb>
 
-      {state.status === "loading" && <p className="text-sm text-muted">{t("loading")}</p>}
+      {state.status === "loading" && <p className="text-sm text-muted-foreground">{t("loading")}</p>}
 
       {state.status === "notFound" && (
-        <Callout tone="info" iconLabel={tClinician("notFound.title")}>
-          {tClinician("notFound.body")}
-        </Callout>
+        <Alert>
+          <CircleAlertIcon />
+          <AlertTitle>{tClinician("notFound.title")}</AlertTitle>
+          <AlertDescription>{tClinician("notFound.body")}</AlertDescription>
+        </Alert>
       )}
 
       {state.status === "error" && (
-        <Callout tone="error" iconLabel={tClinician("error.title")}>
-          {state.message}
-        </Callout>
+        <Alert variant="destructive">
+          <CircleAlertIcon />
+          <AlertTitle>{tClinician("error.title")}</AlertTitle>
+          <AlertDescription>{state.message}</AlertDescription>
+        </Alert>
       )}
 
       {state.status === "ready" && <EntryDetailView entry={state.entry} patientId={patientId} />}
@@ -128,8 +146,8 @@ export default function ClinicianEntryDetailPage({
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid grid-cols-1 gap-1 px-4 py-3 sm:grid-cols-3 sm:gap-4">
-      <dt className="text-sm font-medium text-muted">{label}</dt>
-      <dd className="text-sm text-foreground sm:col-span-2">{children}</dd>
+      <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
+      <dd className="text-sm sm:col-span-2">{children}</dd>
     </div>
   );
 }
@@ -140,8 +158,8 @@ function EntryDetailView({ entry, patientId }: { entry: EntryDetail; patientId: 
   const f = t.raw("detail.fields") as Record<string, string>;
 
   const rows: Array<[string, ReactNode]> = [
-    [f.occurredAt, formatDate(entry.occurredAt)],
-    [f.recordedAt, formatDate(entry.recordedAt)],
+    [f.occurredAt, <span key="occurredAt" className="tabular-nums">{formatDate(entry.occurredAt)}</span>],
+    [f.recordedAt, <span key="recordedAt" className="tabular-nums">{formatDate(entry.recordedAt)}</span>],
   ];
 
   if (entry.code || entry.displayName) {
@@ -187,23 +205,32 @@ function EntryDetailView({ entry, patientId }: { entry: EntryDetail; patientId: 
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Icon className="size-6 shrink-0 text-muted" />
-        <h1 className="text-2xl font-bold text-foreground">
+      <div className="flex items-center gap-3">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+          <Icon className="size-4" />
+        </span>
+        <h1 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
           {t(`entryTypes.${entry.entryType}`)}
         </h1>
       </div>
 
       {entry.supersedesId && (
-        <Callout tone="info" iconLabel={t("detail.title")}>
-          <span>{t("detail.correctsNotice")}</span>{" "}
-          <InlineLink href={`/patients/${patientId}/records/${entry.supersedesId}`}>
-            {t("detail.viewPrevious")}
-          </InlineLink>
-        </Callout>
+        <Alert>
+          <CircleAlertIcon />
+          <AlertTitle>{t("detail.title")}</AlertTitle>
+          <AlertDescription>
+            <span>{t("detail.correctsNotice")}</span>{" "}
+            <Link
+              href={`/patients/${patientId}/records/${entry.supersedesId}`}
+              className="font-medium text-primary underline-offset-4 hover:underline"
+            >
+              {t("detail.viewPrevious")}
+            </Link>
+          </AlertDescription>
+        </Alert>
       )}
 
-      <dl className="divide-y divide-border rounded-xl border border-border bg-surface shadow-sm">
+      <dl className="divide-y divide-border rounded-xl border bg-card text-card-foreground">
         {rows.map(([label, value]) => (
           <Field key={label} label={label}>
             {value}
@@ -213,7 +240,7 @@ function EntryDetailView({ entry, patientId }: { entry: EntryDetail; patientId: 
 
       {entry.documents.length > 0 && (
         <div className="space-y-2">
-          <h2 className="text-sm font-semibold text-muted">{f.documents}</h2>
+          <h2 className="text-sm font-semibold text-muted-foreground">{f.documents}</h2>
           <ul className="space-y-2">
             {entry.documents.map((doc) => (
               <DocumentViewer key={doc.id} doc={doc} />

@@ -34,5 +34,11 @@
     "aboveRange": "above reference range",
     "belowRange": "below reference range",
     "picker": "Lab test"
+  },
+  "stats": {
+    "totalVisits": "Total visits",
+    "activeMedications": "Active medications",
+    "labTestsTracked": "Lab tests tracked",
+    "dataQualityFlags": "Data quality notes"
   }
 }

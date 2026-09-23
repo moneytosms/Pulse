@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button } from "@/components/ui/Button";
-import { Callout } from "@/components/ui/Callout";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { ClinicalText } from "@/components/ClinicalText";
+import { TriangleAlertIcon } from "lucide-react";
 import { ApiError } from "@/lib/api";
 import { useApiErrorMessage } from "@/lib/errors";
 import { VIEWABLE_DOCUMENT_MIME_TYPES, type RecordDocument } from "@/lib/records";
@@ -64,34 +66,40 @@ export function DocumentViewer({ doc }: { doc: RecordDocument }) {
   }
 
   return (
-    <li className="space-y-2 rounded-xl border border-border bg-surface shadow-sm px-4 py-3 text-sm">
+    <li className="space-y-2 rounded-xl border bg-card px-4 py-3 text-sm shadow-sm">
       <div className="flex items-center justify-between gap-2">
         <ClinicalText>{doc.filename}</ClinicalText>
         {viewable && state.status !== "ready" && (
           <Button
-            variant="secondary"
+            variant="outline"
             className="shrink-0"
-            loading={state.status === "loading"}
+            disabled={state.status === "loading"}
+            aria-busy={state.status === "loading"}
             onClick={load}
           >
+            {state.status === "loading" && <Spinner />}
             {t("detail.documentViewer.view")}
           </Button>
         )}
       </div>
 
-      {!viewable && <p className="text-xs text-muted">{t("detail.documentViewer.unsupported")}</p>}
+      {!viewable && (
+        <p className="text-xs text-muted-foreground">{t("detail.documentViewer.unsupported")}</p>
+      )}
 
       {state.status === "error" && (
-        <Callout tone="error" iconLabel={t("error.title")}>
-          {state.message}
-        </Callout>
+        <Alert variant="destructive">
+          <TriangleAlertIcon />
+          <AlertTitle>{t("error.title")}</AlertTitle>
+          <AlertDescription>{state.message}</AlertDescription>
+        </Alert>
       )}
 
       {state.status === "ready" && doc.mimeType === "application/pdf" && (
         <iframe
           src={state.url}
           title={doc.filename}
-          className="h-96 w-full rounded-md border border-border bg-background"
+          className="h-96 w-full rounded-md border bg-background"
         />
       )}
 
@@ -100,7 +108,7 @@ export function DocumentViewer({ doc }: { doc: RecordDocument }) {
         <img
           src={state.url}
           alt={doc.filename}
-          className="max-h-96 w-full rounded-md border border-border object-contain"
+          className="max-h-96 w-full rounded-md border object-contain"
         />
       )}
     </li>

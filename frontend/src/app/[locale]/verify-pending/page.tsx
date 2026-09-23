@@ -3,9 +3,11 @@
 import { Suspense, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
-import { Button } from "@/components/ui/Button";
-import { Callout } from "@/components/ui/Callout";
-import { InlineLink } from "@/components/ui/InlineLink";
+import { CircleAlertIcon, CircleCheckIcon } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { Link } from "@/i18n/navigation";
 import { api } from "@/lib/api";
 import { useApiErrorMessage } from "@/lib/errors";
 
@@ -31,41 +33,45 @@ function VerifyPending() {
   }
 
   return (
-    <section className="auth-wash mx-auto max-w-sm space-y-6 rounded-3xl p-4 sm:p-6">
-      <h1 className="text-2xl font-bold text-foreground">
-        {t("verifyPending.title")}
-      </h1>
+    <section className="animate-in fade-in-0 slide-in-from-bottom-1 mx-auto max-w-sm space-y-6 duration-300 motion-reduce:animate-none">
+      <h1 className="text-2xl font-bold text-foreground">{t("verifyPending.title")}</h1>
 
-      <p className="text-sm text-muted">
-        {email
-          ? t("verifyPending.body", { email })
-          : t("verifyPending.bodyNoEmail")}
+      <p className="text-sm text-muted-foreground">
+        {email ? t("verifyPending.body", { email }) : t("verifyPending.bodyNoEmail")}
       </p>
 
       {status === "sent" && (
-        <Callout tone="success" iconLabel={t("verifyPending.title")}>
-          {t("verifyPending.resent")}
-        </Callout>
+        <Alert className="border-consent-active/40 text-consent-active">
+          <CircleCheckIcon />
+          <AlertDescription className="text-consent-active">
+            {t("verifyPending.resent")}
+          </AlertDescription>
+        </Alert>
       )}
       {error && (
-        <Callout tone="error" iconLabel={t("verifyPending.title")}>
-          {error}
-        </Callout>
+        <Alert variant="destructive">
+          <CircleAlertIcon />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
       {email && (
         <Button
-          variant="secondary"
-          loading={status === "sending"}
+          variant="outline"
+          disabled={status === "sending"}
+          aria-busy={status === "sending"}
           onClick={resend}
-          className="w-full"
+          className="h-11 w-full"
         >
+          {status === "sending" && <Spinner />}
           {t("verifyPending.resend")}
         </Button>
       )}
 
       <p className="text-sm">
-        <InlineLink href="/login">{t("verifyPending.backToLogin")}</InlineLink>
+        <Link href="/login" className="font-medium text-primary underline-offset-4 hover:underline">
+          {t("verifyPending.backToLogin")}
+        </Link>
       </p>
     </section>
   );

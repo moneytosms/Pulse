@@ -38,5 +38,22 @@
     "submit": "जमा करें",
     "retry": "पुनः प्रयास करें",
     "loading": "लोड हो रहा है…"
+  },
+  "nav": {
+    "label": "मुख्य",
+    "timeline": "टाइमलाइन",
+    "consent": "पहुँच",
+    "audit": "पहुँच लॉग",
+    "notifications": "सूचनाएँ",
+    "analytics": "विश्लेषण",
+    "profile": "प्रोफ़ाइल",
+    "patients": "मरीज़",
+    "admin": "प्रशासन",
+    "duplicates": "डुप्लिकेट",
+    "signIn": "साइन इन करें",
+    "signOut": "साइन आउट करें",
+    "openMenu": "मेनू खोलें",
+    "toggleTheme": "थीम बदलें",
+    "account": "खाता"
   }
 }

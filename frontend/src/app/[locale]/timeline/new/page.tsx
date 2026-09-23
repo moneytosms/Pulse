@@ -3,12 +3,22 @@
 import { useId, useState } from "react";
 import type { FormEvent } from "react";
 import { useTranslations } from "next-intl";
-import { Button } from "@/components/ui/Button";
-import { Callout } from "@/components/ui/Callout";
-import { FormField } from "@/components/ui/FormField";
-import { Input } from "@/components/ui/Input";
-import { NavLink } from "@/components/ui/NavLink";
-import { Select } from "@/components/ui/Select";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
+import { Link } from "@/i18n/navigation";
 import { api } from "@/lib/api";
 import { useApiErrorMessage, useFieldErrors } from "@/lib/errors";
 import {
@@ -19,6 +29,27 @@ import {
 } from "@/lib/records";
 
 const CODED_TYPES = new Set<EntryType>(["DIAGNOSIS", "PROCEDURE", "LAB_REPORT"]);
+
+// Focus order for jumping to the first invalid field after a 422 — mirrors
+// the form's visual top-to-bottom order.
+const FIELD_ORDER = [
+  "patientId",
+  "entryType",
+  "occurredAt",
+  "codeSystem",
+  "code",
+  "displayName",
+  "valueNumeric",
+  "valueText",
+  "unit",
+  "referenceLow",
+  "referenceHigh",
+  "medicationName",
+  "dosage",
+  "frequency",
+  "route",
+  "text",
+];
 
 // Provider Staff files an Entry for any Patient (clinical-safety.md:
 // `patient.user_id` is nullable and load-bearing — a Patient need not have
@@ -110,7 +141,13 @@ export default function NewEntryPage() {
       }
     } catch (err) {
       const fields = fieldErrors(err);
-      if (Object.keys(fields).length > 0) setErrors(fields);
+      if (Object.keys(fields).length > 0) {
+        setErrors(fields);
+        const firstInvalid = FIELD_ORDER.find((name) => fields[name]);
+        if (firstInvalid) {
+          document.getElementById(`${formId}-${firstInvalid}`)?.focus();
+        }
+      }
       setFormError(errorMessage(err));
     } finally {
       setSubmitting(false);
@@ -119,189 +156,206 @@ export default function NewEntryPage() {
 
   if (createdId) {
     return (
-      <section className="mx-auto max-w-lg space-y-4">
-        <Callout tone="success" iconLabel={t("new.success.title")}>
-          {formError ?? t("new.success.body")}
-        </Callout>
-        <NavLink href={`/timeline/${createdId}`} icon="forward">
-          {t("new.success.viewEntry")}
-        </NavLink>
+      <section className="mx-auto max-w-lg animate-in fade-in-0 slide-in-from-bottom-1 space-y-4 duration-300 motion-reduce:animate-none">
+        <Alert className="border-consent-active/40 text-consent-active">
+          <AlertTitle>{t("new.success.title")}</AlertTitle>
+          <AlertDescription>{formError ?? t("new.success.body")}</AlertDescription>
+        </Alert>
+        <Button asChild>
+          <Link href={`/timeline/${createdId}`}>{t("new.success.viewEntry")}</Link>
+        </Button>
       </section>
     );
   }
 
   return (
-    <section className="mx-auto max-w-lg space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold text-foreground">{t("new.title")}</h1>
-        <p className="text-sm text-muted">{t("new.subtitle")}</p>
+    <section className="mx-auto max-w-lg animate-in fade-in-0 slide-in-from-bottom-1 space-y-8 duration-300 motion-reduce:animate-none">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
+          {t("new.title")}
+        </h1>
+        <p className="text-pretty text-muted-foreground">{t("new.subtitle")}</p>
       </div>
 
       {formError && (
-        <Callout tone="error" iconLabel={t("new.title")}>
-          {formError}
-        </Callout>
+        <Alert variant="destructive">
+          <AlertTitle>{t("new.title")}</AlertTitle>
+          <AlertDescription>{formError}</AlertDescription>
+        </Alert>
       )}
 
       <form onSubmit={onSubmit} noValidate className="space-y-4">
-        <FormField label={f.patientId} error={errors.patientId}>
-          {(props) => (
-            <Input {...props} value={patientId} onChange={(e) => setPatientId(e.target.value)} />
-          )}
-        </FormField>
+        <TextField
+          formId={formId}
+          name="patientId"
+          label={f.patientId}
+          value={patientId}
+          onChange={setPatientId}
+          error={errors.patientId}
+        />
 
-        <FormField label={f.entryType} error={errors.entryType}>
-          {(props) => (
-            <Select
-              {...props}
-              value={entryType || undefined}
-              onValueChange={(value) => setEntryType(value as EntryType)}
-              placeholder={f.entryType}
-              options={ENTRY_TYPES.map((type) => ({
-                value: type,
-                label: tTimeline(`entryTypes.${type}`),
-              }))}
-            />
-          )}
-        </FormField>
+        <EntryTypeField
+          formId={formId}
+          label={f.entryType}
+          value={entryType}
+          onChange={setEntryType}
+          error={errors.entryType}
+          options={ENTRY_TYPES.map((type) => ({
+            value: type,
+            label: tTimeline(`entryTypes.${type}`),
+          }))}
+        />
 
-        <FormField label={f.occurredAt} error={errors.occurredAt}>
-          {(props) => (
-            <Input
-              {...props}
-              type="datetime-local"
-              value={occurredAt}
-              onChange={(e) => setOccurredAt(e.target.value)}
-            />
-          )}
-        </FormField>
+        <TextField
+          formId={formId}
+          name="occurredAt"
+          label={f.occurredAt}
+          value={occurredAt}
+          onChange={setOccurredAt}
+          error={errors.occurredAt}
+          type="datetime-local"
+        />
 
         <div className="flex items-center gap-2">
-          <input
+          <Checkbox
             id={`${formId}-critical`}
-            type="checkbox"
             checked={isCritical}
-            onChange={(e) => setIsCritical(e.target.checked)}
-            className="size-4 rounded border-border-strong"
+            onCheckedChange={(checked) => setIsCritical(checked === true)}
           />
-          <label htmlFor={`${formId}-critical`} className="text-sm text-foreground">
-            {f.isCritical}
-          </label>
+          <Label htmlFor={`${formId}-critical`}>{f.isCritical}</Label>
         </div>
 
         {entryType && CODED_TYPES.has(entryType) && (
           <>
-            <FormField label={f.codeSystem} error={errors.codeSystem}>
-              {(props) => (
-                <Input {...props} value={codeSystem} onChange={(e) => setCodeSystem(e.target.value)} />
-              )}
-            </FormField>
-            <FormField label={f.code} error={errors.code}>
-              {(props) => <Input {...props} value={code} onChange={(e) => setCode(e.target.value)} />}
-            </FormField>
-            <FormField label={f.displayName} error={errors.displayName}>
-              {(props) => (
-                <Input
-                  {...props}
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                />
-              )}
-            </FormField>
+            <TextField
+              formId={formId}
+              name="codeSystem"
+              label={f.codeSystem}
+              value={codeSystem}
+              onChange={setCodeSystem}
+              error={errors.codeSystem}
+            />
+            <TextField
+              formId={formId}
+              name="code"
+              label={f.code}
+              value={code}
+              onChange={setCode}
+              error={errors.code}
+            />
+            <TextField
+              formId={formId}
+              name="displayName"
+              label={f.displayName}
+              value={displayName}
+              onChange={setDisplayName}
+              error={errors.displayName}
+            />
           </>
         )}
 
         {entryType === "LAB_REPORT" && (
           <>
-            <FormField label={f.valueNumeric} error={errors.valueNumeric}>
-              {(props) => (
-                <Input
-                  {...props}
-                  type="number"
-                  inputMode="decimal"
-                  value={valueNumeric}
-                  onChange={(e) => setValueNumeric(e.target.value)}
-                />
-              )}
-            </FormField>
-            <FormField label={f.valueText} error={errors.valueText}>
-              {(props) => (
-                <Input {...props} value={valueText} onChange={(e) => setValueText(e.target.value)} />
-              )}
-            </FormField>
-            <FormField label={f.unit} error={errors.unit}>
-              {(props) => <Input {...props} value={unit} onChange={(e) => setUnit(e.target.value)} />}
-            </FormField>
-            <FormField label={f.referenceLow} error={errors.referenceLow}>
-              {(props) => (
-                <Input
-                  {...props}
-                  type="number"
-                  inputMode="decimal"
-                  value={referenceLow}
-                  onChange={(e) => setReferenceLow(e.target.value)}
-                />
-              )}
-            </FormField>
-            <FormField label={f.referenceHigh} error={errors.referenceHigh}>
-              {(props) => (
-                <Input
-                  {...props}
-                  type="number"
-                  inputMode="decimal"
-                  value={referenceHigh}
-                  onChange={(e) => setReferenceHigh(e.target.value)}
-                />
-              )}
-            </FormField>
+            <TextField
+              formId={formId}
+              name="valueNumeric"
+              label={f.valueNumeric}
+              value={valueNumeric}
+              onChange={setValueNumeric}
+              error={errors.valueNumeric}
+              type="number"
+              inputMode="decimal"
+            />
+            <TextField
+              formId={formId}
+              name="valueText"
+              label={f.valueText}
+              value={valueText}
+              onChange={setValueText}
+              error={errors.valueText}
+            />
+            <TextField
+              formId={formId}
+              name="unit"
+              label={f.unit}
+              value={unit}
+              onChange={setUnit}
+              error={errors.unit}
+            />
+            <TextField
+              formId={formId}
+              name="referenceLow"
+              label={f.referenceLow}
+              value={referenceLow}
+              onChange={setReferenceLow}
+              error={errors.referenceLow}
+              type="number"
+              inputMode="decimal"
+            />
+            <TextField
+              formId={formId}
+              name="referenceHigh"
+              label={f.referenceHigh}
+              value={referenceHigh}
+              onChange={setReferenceHigh}
+              error={errors.referenceHigh}
+              type="number"
+              inputMode="decimal"
+            />
           </>
         )}
 
         {entryType === "PRESCRIPTION" && (
           <>
-            <FormField label={f.medicationName} error={errors.medicationName}>
-              {(props) => (
-                <Input
-                  {...props}
-                  value={medicationName}
-                  onChange={(e) => setMedicationName(e.target.value)}
-                />
-              )}
-            </FormField>
-            <FormField label={f.dosage} error={errors.dosage}>
-              {(props) => <Input {...props} value={dosage} onChange={(e) => setDosage(e.target.value)} />}
-            </FormField>
-            <FormField label={f.frequency} error={errors.frequency}>
-              {(props) => (
-                <Input {...props} value={frequency} onChange={(e) => setFrequency(e.target.value)} />
-              )}
-            </FormField>
-            <FormField label={f.route} error={errors.route}>
-              {(props) => <Input {...props} value={route} onChange={(e) => setRoute(e.target.value)} />}
-            </FormField>
+            <TextField
+              formId={formId}
+              name="medicationName"
+              label={f.medicationName}
+              value={medicationName}
+              onChange={setMedicationName}
+              error={errors.medicationName}
+            />
+            <TextField
+              formId={formId}
+              name="dosage"
+              label={f.dosage}
+              value={dosage}
+              onChange={setDosage}
+              error={errors.dosage}
+            />
+            <TextField
+              formId={formId}
+              name="frequency"
+              label={f.frequency}
+              value={frequency}
+              onChange={setFrequency}
+              error={errors.frequency}
+            />
+            <TextField
+              formId={formId}
+              name="route"
+              label={f.route}
+              value={route}
+              onChange={setRoute}
+              error={errors.route}
+            />
           </>
         )}
 
         {entryType === "CLINICAL_NOTE" && (
-          <FormField label={f.text} error={errors.text}>
-            {({ invalid, ...props }) => (
-              <textarea
-                {...props}
-                aria-invalid={invalid || undefined}
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                rows={5}
-                className="block w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-              />
-            )}
-          </FormField>
+          <TextAreaField
+            formId={formId}
+            name="text"
+            label={f.text}
+            value={text}
+            onChange={setText}
+            error={errors.text}
+          />
         )}
 
         <div className="space-y-1.5">
-          <label htmlFor={`${formId}-file`} className="block text-sm font-medium text-foreground">
-            {f.file}
-          </label>
-          <p className="text-xs text-muted">{t("new.fileHint")}</p>
+          <Label htmlFor={`${formId}-file`}>{f.file}</Label>
+          <p className="text-xs text-muted-foreground">{t("new.fileHint")}</p>
           <input
             id={`${formId}-file`}
             type="file"
@@ -313,28 +367,133 @@ export default function NewEntryPage() {
 
         {uploadFraction != null && (
           <div className="space-y-1">
-            <p className="text-xs text-muted">
+            <p className="text-xs tabular-nums text-muted-foreground">
               {t("new.upload.inProgress", { percent: Math.round(uploadFraction * 100) })}
             </p>
-            <div
-              role="progressbar"
-              aria-valuenow={Math.round(uploadFraction * 100)}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              className="h-2 w-full overflow-hidden rounded-full bg-surface-raised"
-            >
-              <div
-                className="h-full bg-accent transition-[width]"
-                style={{ width: `${Math.round(uploadFraction * 100)}%` }}
-              />
-            </div>
+            <Progress value={Math.round(uploadFraction * 100)} />
           </div>
         )}
 
-        <Button type="submit" loading={submitting} className="w-full">
+        <Button type="submit" disabled={submitting} aria-busy={submitting} className="w-full">
+          {submitting && <Spinner />}
           {submitting ? t("new.submitting") : t("new.submit")}
         </Button>
       </form>
     </section>
+  );
+}
+
+function TextField({
+  formId,
+  name,
+  label,
+  value,
+  onChange,
+  error,
+  type = "text",
+  inputMode,
+}: {
+  formId: string;
+  name: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
+  type?: string;
+  inputMode?: "decimal";
+}) {
+  const inputId = `${formId}-${name}`;
+  const errorId = `${inputId}-error`;
+  return (
+    <Field data-invalid={!!error || undefined}>
+      <FieldLabel htmlFor={inputId}>{label}</FieldLabel>
+      <Input
+        id={inputId}
+        type={type}
+        inputMode={inputMode}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-invalid={!!error}
+        aria-describedby={error ? errorId : undefined}
+      />
+      {error && <FieldError id={errorId}>{error}</FieldError>}
+    </Field>
+  );
+}
+
+function TextAreaField({
+  formId,
+  name,
+  label,
+  value,
+  onChange,
+  error,
+}: {
+  formId: string;
+  name: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
+}) {
+  const inputId = `${formId}-${name}`;
+  const errorId = `${inputId}-error`;
+  return (
+    <Field data-invalid={!!error || undefined}>
+      <FieldLabel htmlFor={inputId}>{label}</FieldLabel>
+      <textarea
+        id={inputId}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-invalid={!!error}
+        aria-describedby={error ? errorId : undefined}
+        rows={5}
+        className="block w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20"
+      />
+      {error && <FieldError id={errorId}>{error}</FieldError>}
+    </Field>
+  );
+}
+
+function EntryTypeField({
+  formId,
+  label,
+  value,
+  onChange,
+  error,
+  options,
+}: {
+  formId: string;
+  label: string;
+  value: EntryType | "";
+  onChange: (value: EntryType) => void;
+  error?: string;
+  options: Array<{ value: EntryType; label: string }>;
+}) {
+  const inputId = `${formId}-entryType`;
+  const errorId = `${inputId}-error`;
+  return (
+    <Field data-invalid={!!error || undefined}>
+      <FieldLabel htmlFor={inputId}>{label}</FieldLabel>
+      <Select value={value ?? ""} onValueChange={(v) => onChange(v as EntryType)}>
+        <SelectTrigger
+          id={inputId}
+          aria-label={label}
+          aria-invalid={!!error}
+          aria-describedby={error ? errorId : undefined}
+          className="w-full"
+        >
+          <SelectValue placeholder={label} />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {error && <FieldError id={errorId}>{error}</FieldError>}
+    </Field>
   );
 }

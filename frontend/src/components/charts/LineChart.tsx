@@ -1,13 +1,28 @@
-import { cn } from "@/lib/cn";
+"use client";
 
-// Minimal hand-rolled SVG line chart for the lab/vital trend series. No
-// charting library dependency — see BarChart.tsx for the rationale.
+import {
+  CartesianGrid,
+  Line,
+  LineChart as RechartsLineChart,
+  XAxis,
+  YAxis,
+} from "recharts";
+import type { DotItemDotProps } from "recharts";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
+import { cn } from "@/lib/utils";
+
+// Lab/vital trend line chart via shadcn's `chart` wrapper around recharts.
 //
 // Abnormal points are never marked by colour alone: each carries a distinct
-// marker shape (a ring instead of a dot) in addition to the critical colour,
-// and the caller renders the same points as text rows below the chart with
-// an icon + label (.claude/rules/frontend.md, clinical-safety.md — colour
-// never carries meaning alone).
+// marker shape (an unfilled ring instead of a filled dot) in addition to the
+// critical colour, and the caller renders the same points as text rows below
+// the chart with an icon + label (.claude/rules/frontend.md,
+// clinical-safety.md — colour never carries meaning alone).
 
 export interface LinePoint {
   x: string;
@@ -21,57 +36,74 @@ interface LineChartProps {
   className?: string;
 }
 
-const WIDTH = 480;
-const HEIGHT = 160;
-const PAD = 24;
+const chartConfig = {
+  value: { label: "Value", color: "var(--chart-1)" },
+} satisfies ChartConfig;
+
+function TrendDot(props: DotItemDotProps) {
+  const { cx, cy, payload, index } = props;
+  if (cx == null || cy == null) return null;
+  const abnormal = Boolean((payload as LinePoint | undefined)?.abnormal);
+  if (abnormal) {
+    return (
+      <circle
+        key={index}
+        cx={cx}
+        cy={cy}
+        r={6}
+        fill="none"
+        stroke="var(--critical)"
+        strokeWidth={2}
+      />
+    );
+  }
+  return <circle key={index} cx={cx} cy={cy} r={3} fill="var(--color-value)" />;
+}
 
 export function LineChart({ data, ariaLabel, className }: LineChartProps) {
   if (data.length === 0) return null;
 
-  const values = data.map((d) => d.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-
-  const points = data.map((d, i) => {
-    const x = data.length === 1 ? WIDTH / 2 : PAD + (i / (data.length - 1)) * (WIDTH - PAD * 2);
-    const y = HEIGHT - PAD - ((d.value - min) / range) * (HEIGHT - PAD * 2);
-    return { ...d, x, y };
-  });
-
-  const path = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
-
   return (
-    <div className={cn("w-full overflow-x-auto", className)} role="img" aria-label={ariaLabel}>
-      <svg
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        width={WIDTH}
-        height={HEIGHT}
-        aria-hidden="true"
-        className="min-w-full"
-      >
-        <path d={path} fill="none" stroke="var(--color-accent)" strokeWidth={2} />
-        {points.map((p, i) => (
-          <g key={i}>
-            {p.abnormal ? (
-              <circle
-                cx={p.x}
-                cy={p.y}
-                r={6}
-                fill="none"
-                stroke="var(--color-critical)"
-                strokeWidth={2}
-              >
-                <title>{`${data[i].x}: ${data[i].value}`}</title>
-              </circle>
-            ) : (
-              <circle cx={p.x} cy={p.y} r={3} fill="var(--color-accent)">
-                <title>{`${data[i].x}: ${data[i].value}`}</title>
-              </circle>
-            )}
-          </g>
-        ))}
-      </svg>
+    <div role="img" aria-label={ariaLabel} className={cn("w-full", className)}>
+      <ChartContainer config={chartConfig} className="aspect-auto h-40 w-full">
+        <RechartsLineChart data={data} margin={{ left: 0, right: 12, top: 8 }}>
+          <CartesianGrid vertical={false} />
+          <XAxis
+            dataKey="x"
+            tickLine={false}
+            axisLine={false}
+            tickMargin={8}
+            fontSize={10}
+          />
+          <YAxis hide domain={["auto", "auto"]} />
+          <ChartTooltip
+            cursor={false}
+            content={
+              <ChartTooltipContent
+                hideLabel
+                formatter={(value, _name, item) => (
+                  <div className="flex flex-1 items-center justify-between gap-2">
+                    <span className="flex-1 text-muted-foreground">
+                      {String(item.payload?.x ?? "")}
+                    </span>
+                    <span className="font-mono font-medium text-foreground tabular-nums">
+                      {String(value)}
+                    </span>
+                  </div>
+                )}
+              />
+            }
+          />
+          <Line
+            dataKey="value"
+            type="monotone"
+            stroke="var(--color-value)"
+            strokeWidth={2}
+            dot={TrendDot}
+            isAnimationActive={false}
+          />
+        </RechartsLineChart>
+      </ChartContainer>
     </div>
   );
 }

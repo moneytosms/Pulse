@@ -1,15 +1,29 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
-import { BarChart } from "@/components/charts/BarChart";
-import { LineChart } from "@/components/charts/LineChart";
+import {
+  ActivityIcon,
+  FlaskConicalIcon,
+  InfoIcon,
+  PillIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
+import type { BarDatum } from "@/components/charts/BarChart";
+import type { LinePoint } from "@/components/charts/LineChart";
 import { ClinicalText } from "@/components/ClinicalText";
-import { Callout } from "@/components/ui/Callout";
-import { Label } from "@/components/ui/Label";
-import { Select } from "@/components/ui/Select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { AlertTriangleIcon, InfoIcon } from "@/components/ui/icons";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from "@/i18n/navigation";
 import type {
   DataQualityFlag,
@@ -34,11 +48,23 @@ import { formatDate, formatNumber } from "@/lib/format";
 // (`backend/app/modules/analytics/schemas.py` docstring) — rendered as a
 // plain list, never gating anything else on this page.
 
+// recharts is heavy — load both chart components client-side only, after
+// the page shell (stat cards, data-quality alert) has already painted.
+const ChartSkeleton = () => <Skeleton className="h-40 w-full" />;
+const BarChart = dynamic(
+  () => import("@/components/charts/BarChart").then((m) => m.BarChart),
+  { ssr: false, loading: ChartSkeleton },
+);
+const LineChart = dynamic(
+  () => import("@/components/charts/LineChart").then((m) => m.LineChart),
+  { ssr: false, loading: ChartSkeleton },
+);
+
 const FLAG_ICON: Record<DataQualityFlag, typeof InfoIcon> = {
   MISSING_DOB: InfoIcon,
   MISSING_CONTACT: InfoIcon,
-  FUTURE_DATED_ENTRY: AlertTriangleIcon,
-  IMPLAUSIBLE_DOB: AlertTriangleIcon,
+  FUTURE_DATED_ENTRY: TriangleAlertIcon,
+  IMPLAUSIBLE_DOB: TriangleAlertIcon,
   UNCLAIMED_LONG_LIVED: InfoIcon,
 };
 
@@ -62,6 +88,64 @@ type LoadState =
   | { status: "notFound" }
   | { status: "error"; message: string }
   | { status: "ready"; data: Loaded };
+
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof ActivityIcon;
+  label: string;
+  value: number;
+}) {
+  return (
+    <Card size="sm">
+      <CardContent className="flex items-center gap-3">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+          <Icon className="size-4" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground">{label}</p>
+          <p className="text-xl font-semibold tabular-nums text-foreground">
+            {formatNumber(value)}
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-8" aria-hidden="true">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Card key={i} size="sm">
+            <CardContent className="flex items-center gap-3">
+              <Skeleton className="size-9 shrink-0 rounded-md" />
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-5 w-10" />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <Card key={i}>
+            <CardHeader>
+              <Skeleton className="h-4 w-32" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-40 w-full" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function AnalyticsPage() {
   const t = useTranslations("analytics");
@@ -156,103 +240,153 @@ export default function AnalyticsPage() {
     };
   }, [patientId, selectedTest]);
 
+  const selectedLabTest =
+    state.status === "ready"
+      ? state.data.labTests.find((test) => testKey(test) === selectedTest)
+      : undefined;
+
   return (
-    <section className="space-y-6">
+    <section className="animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-reduce:animate-none space-y-8">
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold text-foreground">{t("title")}</h1>
-        <p className="text-sm text-muted">{t("subtitle")}</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
+          {t("title")}
+        </h1>
+        <p className="text-sm text-pretty text-muted-foreground">{t("subtitle")}</p>
       </div>
 
-      {state.status === "loading" && <p className="text-sm text-muted">{t("loading")}</p>}
+      {state.status === "loading" && (
+        <>
+          <span className="sr-only">{t("loading")}</span>
+          <DashboardSkeleton />
+        </>
+      )}
 
       {state.status === "notFound" && (
-        <Callout tone="info" iconLabel={t("title")}>
-          {t("notFound")}
-        </Callout>
+        <Alert>
+          <InfoIcon />
+          <AlertTitle>{t("title")}</AlertTitle>
+          <AlertDescription>{t("notFound")}</AlertDescription>
+        </Alert>
       )}
 
       {state.status === "error" && (
-        <Callout tone="error" iconLabel={t("error.title")}>
-          {state.message}
-        </Callout>
+        <Alert variant="destructive">
+          <InfoIcon />
+          <AlertTitle>{t("error.title")}</AlertTitle>
+          <AlertDescription>{state.message}</AlertDescription>
+        </Alert>
       )}
 
       {state.status === "ready" && (
-        <div className="space-y-6">
+        <div className="space-y-8">
+          {/* Stat cards row (dashboard-01 style) — derived from the same
+              series rendered below, no extra API calls. */}
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <StatCard
+              icon={ActivityIcon}
+              label={t("stats.totalVisits")}
+              value={state.data.visitFrequency.reduce((sum, row) => sum + row.count, 0)}
+            />
+            <StatCard
+              icon={PillIcon}
+              label={t("stats.activeMedications")}
+              value={state.data.activeMedications.length}
+            />
+            <StatCard
+              icon={FlaskConicalIcon}
+              label={t("stats.labTestsTracked")}
+              value={state.data.labTests.length}
+            />
+            <StatCard
+              icon={TriangleAlertIcon}
+              label={t("stats.dataQualityFlags")}
+              value={state.data.dataQualityFlags.length}
+            />
+          </div>
+
           {state.data.dataQualityFlags.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("dataQuality.title")}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <p className="text-xs text-muted">{t("dataQuality.hint")}</p>
-                <ul className="space-y-2">
+            <Alert>
+              <InfoIcon />
+              <AlertTitle>{t("dataQuality.title")}</AlertTitle>
+              <AlertDescription>
+                <p>{t("dataQuality.hint")}</p>
+                <ul className="mt-2 space-y-1.5">
                   {state.data.dataQualityFlags.map((flag) => {
                     const Icon = FLAG_ICON[flag];
                     return (
-                      <li
-                        key={flag}
-                        className="flex items-start gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-foreground"
-                      >
-                        <Icon className="mt-0.5 shrink-0 text-muted" />
+                      <li key={flag} className="flex items-start gap-2 text-foreground">
+                        <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                         <span>{t(`dataQuality.flags.${flag}`)}</span>
                       </li>
                     );
                   })}
                 </ul>
-              </CardContent>
-            </Card>
+              </AlertDescription>
+            </Alert>
           )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("visitFrequency.title")}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {state.data.visitFrequency.length === 0 ? (
-                <p className="text-sm text-muted">{t("empty")}</p>
-              ) : (
-                <BarChart
-                  ariaLabel={t("visitFrequency.title")}
-                  formatValue={formatNumber}
-                  data={state.data.visitFrequency.map((row) => ({
-                    label: formatDate(row.month),
-                    value: row.count,
-                  }))}
-                />
-              )}
-            </CardContent>
-          </Card>
+          {/* Chart cards grid */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base font-medium">
+                  {t("visitFrequency.title")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="min-h-40">
+                {state.data.visitFrequency.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">{t("empty")}</p>
+                ) : (
+                  <BarChart
+                    ariaLabel={t("visitFrequency.title")}
+                    formatValue={formatNumber}
+                    data={state.data.visitFrequency.map(
+                      (row): BarDatum => ({
+                        label: formatDate(row.month),
+                        value: row.count,
+                      }),
+                    )}
+                  />
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base font-medium">
+                  {t("providerEntryCounts.title")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="min-h-40">
+                {state.data.providerEntryCounts.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">{t("empty")}</p>
+                ) : (
+                  <BarChart
+                    ariaLabel={t("providerEntryCounts.title")}
+                    formatValue={formatNumber}
+                    data={state.data.providerEntryCounts.map(
+                      (row, i): BarDatum => ({
+                        label: row.providerId
+                          ? t("providerEntryCounts.providerLabel", { n: i + 1 })
+                          : t("providerEntryCounts.unknown"),
+                        value: row.count,
+                      }),
+                    )}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </div>
 
           <Card>
             <CardHeader>
-              <CardTitle>{t("providerEntryCounts.title")}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {state.data.providerEntryCounts.length === 0 ? (
-                <p className="text-sm text-muted">{t("empty")}</p>
-              ) : (
-                <BarChart
-                  ariaLabel={t("providerEntryCounts.title")}
-                  formatValue={formatNumber}
-                  data={state.data.providerEntryCounts.map((row, i) => ({
-                    label: row.providerId
-                      ? t("providerEntryCounts.providerLabel", { n: i + 1 })
-                      : t("providerEntryCounts.unknown"),
-                    value: row.count,
-                  }))}
-                />
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("activeMedications.title")}</CardTitle>
+              <CardTitle className="text-base font-medium">
+                {t("activeMedications.title")}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               {state.data.activeMedications.length === 0 ? (
-                <p className="text-sm text-muted">{t("empty")}</p>
+                <p className="text-sm text-muted-foreground">{t("empty")}</p>
               ) : (
                 <ul className="divide-y divide-border">
                   {state.data.activeMedications.map((med, i) => (
@@ -260,7 +394,7 @@ export default function AnalyticsPage() {
                       <span className="font-medium text-foreground">
                         <ClinicalText>{med.medicationName}</ClinicalText>
                       </span>
-                      <span className="text-xs text-muted">
+                      <span className="text-xs text-muted-foreground">
                         {[med.dosage, med.frequency, med.route]
                           .filter((v): v is string => Boolean(v))
                           .map((v, idx, arr) => (
@@ -270,7 +404,9 @@ export default function AnalyticsPage() {
                             </span>
                           ))}
                       </span>
-                      <span className="text-xs text-muted">{formatDate(med.occurredAt)}</span>
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {formatDate(med.occurredAt)}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -281,33 +417,41 @@ export default function AnalyticsPage() {
           {state.data.labTests.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle>{t("labTrend.title")}</CardTitle>
+                <CardTitle className="text-base font-medium">{t("labTrend.title")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="max-w-xs space-y-1.5">
                   <Label htmlFor="analytics-lab-test">{t("labTrend.picker")}</Label>
-                  <Select
-                    id="analytics-lab-test"
-                    value={selectedTest}
-                    onValueChange={setSelectedTest}
-                    placeholder={t("labTrend.picker")}
-                    options={state.data.labTests.map((test) => ({
-                      value: testKey(test),
-                      label: test.displayName,
-                    }))}
-                  />
+                  <Select value={selectedTest} onValueChange={setSelectedTest}>
+                    <SelectTrigger id="analytics-lab-test" className="w-full">
+                      <SelectValue placeholder={t("labTrend.picker")}>
+                        {selectedLabTest ? (
+                          <ClinicalText>{selectedLabTest.displayName}</ClinicalText>
+                        ) : undefined}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {state.data.labTests.map((test) => (
+                        <SelectItem key={testKey(test)} value={testKey(test)}>
+                          <ClinicalText>{test.displayName}</ClinicalText>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 {labTrend && labTrend.length > 0 ? (
                   <>
                     <LineChart
                       ariaLabel={t("labTrend.title")}
-                      data={labTrend.map((p) => ({
-                        x: formatDate(p.occurredAt),
-                        value: p.valueNumeric ?? 0,
-                        abnormal: p.isAbnormal ?? false,
-                      }))}
+                      data={labTrend.map(
+                        (p): LinePoint => ({
+                          x: formatDate(p.occurredAt),
+                          value: p.valueNumeric ?? 0,
+                          abnormal: p.isAbnormal ?? false,
+                        }),
+                      )}
                     />
-                    <ul className="space-y-1 text-sm">
+                    <ul className="space-y-1.5 text-sm">
                       {labTrend
                         .filter((p) => p.isAbnormal)
                         .map((p, i) => (
@@ -315,8 +459,8 @@ export default function AnalyticsPage() {
                             key={i}
                             className="flex items-center gap-2 rounded-md border border-critical-border bg-critical-surface px-2 py-1 text-critical"
                           >
-                            <AlertTriangleIcon className="shrink-0" />
-                            <span>
+                            <TriangleAlertIcon className="size-4 shrink-0" />
+                            <span className="tabular-nums">
                               {formatDate(p.occurredAt)} —{" "}
                               {p.referenceHigh != null && (p.valueNumeric ?? 0) > p.referenceHigh
                                 ? t("labTrend.aboveRange")
@@ -327,7 +471,7 @@ export default function AnalyticsPage() {
                     </ul>
                   </>
                 ) : (
-                  <p className="text-sm text-muted">{t("empty")}</p>
+                  <p className="text-sm text-muted-foreground">{t("empty")}</p>
                 )}
               </CardContent>
             </Card>

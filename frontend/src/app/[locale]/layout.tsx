@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { hasLocale, NextIntlClientProvider, useTranslations } from "next-intl";
 import { notFound } from "next/navigation";
-import { ActivityIcon } from "@/components/ui/icons";
-import { LocaleSwitcher } from "@/components/LocaleSwitcher";
-import { Link } from "@/i18n/navigation";
+import { ThemeProvider } from "next-themes";
+import { AppHeader } from "@/components/AppHeader";
+import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { routing } from "@/i18n/routing";
 import "../globals.css";
 import "../fonts";
@@ -23,37 +24,27 @@ type Props = {
 };
 
 // Sync Server Component so next-intl's `useTranslations` is available for the
-// chrome (header, skip link, footer).
+// chrome (skip link, footer). The header is a client component (session-aware).
 function Shell({ children }: { children: ReactNode }) {
   const t = useTranslations("app");
   return (
     <>
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:m-2 focus:rounded focus:bg-accent focus:px-3 focus:py-2 focus:text-accent-contrast"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:m-2 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-primary-foreground"
       >
         {t("skipToContent")}
       </a>
       <div className="flex min-h-dvh flex-col">
-        <header className="sticky top-0 z-40 border-b border-border bg-surface/85 backdrop-blur supports-[backdrop-filter]:bg-surface/70">
-          <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-            <Link
-              href="/"
-              className="flex items-center gap-2 rounded-md text-base font-bold tracking-tight text-foreground outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
-            >
-              <span className="flex size-7 items-center justify-center rounded-lg bg-gradient-accent text-accent-contrast">
-                <ActivityIcon className="size-4" strokeWidth={2.5} />
-              </span>
-              {t("name")}
-            </Link>
-            <LocaleSwitcher />
-          </div>
-        </header>
-        <main id="main" className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:py-10">
+        <AppHeader />
+        <main
+          id="main"
+          className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:py-10"
+        >
           {children}
         </main>
-        <footer className="border-t border-border">
-          <div className="mx-auto flex max-w-5xl flex-col gap-1 px-4 py-5 text-xs text-muted sm:flex-row sm:items-center sm:justify-between">
+        <footer className="border-t">
+          <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
             <p>
               {t("name")} — {t("tagline")}
             </p>
@@ -72,11 +63,21 @@ export default async function LocaleLayout({ children, params }: Props) {
   }
 
   return (
-    <html lang={locale}>
+    <html lang={locale} suppressHydrationWarning>
       <body className="min-h-dvh">
-        <NextIntlClientProvider>
-          <Shell>{children}</Shell>
-        </NextIntlClientProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <NextIntlClientProvider>
+            <TooltipProvider>
+              <Shell>{children}</Shell>
+              <Toaster richColors />
+            </TooltipProvider>
+          </NextIntlClientProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

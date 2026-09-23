@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Callout } from "@/components/ui/Callout";
-import { InlineLink } from "@/components/ui/InlineLink";
+import { TriangleAlertIcon } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Link } from "@/i18n/navigation";
 import { api } from "@/lib/api";
 import type { AuditEventProjection } from "@/lib/audit";
 import { formatDate } from "@/lib/format";
@@ -53,10 +54,15 @@ export function BreakGlassBanner({ patientId }: { patientId: string }) {
   if (!event) return null;
 
   return (
-    <Callout tone="error" iconLabel={t("title")}>
-      <span className="block font-medium text-foreground">{t("title")}</span>
-      <span>{t("body", { date: formatDate(event.occurredAt) })}</span>{" "}
-      <InlineLink href="/audit">{t("viewAudit")}</InlineLink>
-    </Callout>
+    <Alert className="border-break-glass/40 bg-break-glass-surface text-break-glass animate-in fade-in-0 slide-in-from-bottom-1 motion-reduce:animate-none duration-300">
+      <TriangleAlertIcon />
+      <AlertTitle>{t("title")}</AlertTitle>
+      <AlertDescription className="text-break-glass/90">
+        {t("body", { date: formatDate(event.occurredAt) })}{" "}
+        <Link href="/audit" className="font-medium underline underline-offset-4">
+          {t("viewAudit")}
+        </Link>
+      </AlertDescription>
+    </Alert>
   );
 }

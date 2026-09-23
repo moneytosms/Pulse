@@ -3,20 +3,38 @@
 import { useEffect, useId, useState } from "react";
 import { useTranslations } from "next-intl";
 import { BreakGlassBanner } from "@/components/BreakGlassBanner";
-import { Button } from "@/components/ui/Button";
-import { Callout } from "@/components/ui/Callout";
-import { Label } from "@/components/ui/Label";
-import { Select } from "@/components/ui/Select";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { ClinicalText } from "@/components/ClinicalText";
 import {
-  AlertTriangleIcon,
-  ClinicalNoteIcon,
-  DiagnosisIcon,
-  FlaskIcon,
-  PrescriptionIcon,
-  ProcedureIcon,
-} from "@/components/ui/icons";
-import { NavLink } from "@/components/ui/NavLink";
+  ChevronRightIcon,
+  ClockIcon,
+  FlaskConicalIcon,
+  NotebookPenIcon,
+  PillIcon,
+  StethoscopeIcon,
+  SyringeIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
 import { Link, useRouter } from "@/i18n/navigation";
 import { api, ApiError } from "@/lib/api";
 import { useApiErrorMessage } from "@/lib/errors";
@@ -25,12 +43,12 @@ import { ENTRY_TYPES, type EntrySummary, type EntryType, type Page } from "@/lib
 
 // One icon per entry-type renderer, paired with the localized type label —
 // never colour alone (.claude/rules/frontend.md).
-const ENTRY_ICONS: Record<EntryType, typeof DiagnosisIcon> = {
-  DIAGNOSIS: DiagnosisIcon,
-  PRESCRIPTION: PrescriptionIcon,
-  LAB_REPORT: FlaskIcon,
-  PROCEDURE: ProcedureIcon,
-  CLINICAL_NOTE: ClinicalNoteIcon,
+const ENTRY_ICONS: Record<EntryType, typeof StethoscopeIcon> = {
+  DIAGNOSIS: StethoscopeIcon,
+  PRESCRIPTION: PillIcon,
+  LAB_REPORT: FlaskConicalIcon,
+  PROCEDURE: SyringeIcon,
+  CLINICAL_NOTE: NotebookPenIcon,
 };
 
 const LIMIT = 20;
@@ -181,48 +199,66 @@ export default function TimelinePage() {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="animate-in fade-in-0 slide-in-from-bottom-1 space-y-8 duration-300 motion-reduce:animate-none">
       {patientId && <BreakGlassBanner patientId={patientId} />}
 
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold text-foreground">{t("title")}</h1>
-          <p className="text-sm text-muted">{t("subtitle")}</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
+            {t("title")}
+          </h1>
+          <p className="text-pretty text-muted-foreground">{t("subtitle")}</p>
         </div>
-        <NavLink href="/timeline/new" className="shrink-0" icon="forward">
-          {t("fileNewEntry")}
-        </NavLink>
+        <Button asChild className="shrink-0">
+          <Link href="/timeline/new">{t("fileNewEntry")}</Link>
+        </Button>
       </div>
 
       <div className="max-w-xs space-y-1.5">
         <Label htmlFor={filterId}>{t("filter.label")}</Label>
         <Select
-          id={filterId}
           value={typeFilter || ALL_TYPES}
           onValueChange={(value) => setTypeFilter(value === ALL_TYPES ? "" : (value as EntryType))}
-          placeholder={t("filter.label")}
-          options={[
-            { value: ALL_TYPES, label: t("filter.all") },
-            ...ENTRY_TYPES.map((type) => ({ value: type, label: t(`entryTypes.${type}`) })),
-          ]}
-        />
+        >
+          <SelectTrigger id={filterId} aria-label={t("filter.label")} className="w-full">
+            <SelectValue placeholder={t("filter.label")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL_TYPES}>{t("filter.all")}</SelectItem>
+            {ENTRY_TYPES.map((type) => (
+              <SelectItem key={type} value={type}>
+                {t(`entryTypes.${type}`)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      {state.status === "loading" && <p className="text-sm text-muted">{t("loading")}</p>}
+      {state.status === "loading" && (
+        <div className="space-y-3" aria-hidden="true">
+          <p className="sr-only">{t("loading")}</p>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 w-full rounded-xl" />
+          ))}
+        </div>
+      )}
 
       {state.status === "notFound" && (
-        <Callout tone="info" iconLabel={t("title")}>
-          {t("notFound")}
-        </Callout>
+        <Alert>
+          <AlertTitle>{t("title")}</AlertTitle>
+          <AlertDescription>{t("notFound")}</AlertDescription>
+        </Alert>
       )}
 
       {state.status === "error" && (
         <div className="space-y-3">
-          <Callout tone="error" iconLabel={t("error.title")}>
-            {state.message}
-          </Callout>
+          <Alert variant="destructive">
+            <TriangleAlertIcon />
+            <AlertTitle>{t("error.title")}</AlertTitle>
+            <AlertDescription>{state.message}</AlertDescription>
+          </Alert>
           {patientId && (
-            <Button variant="secondary" onClick={() => setRetryToken((n) => n + 1)}>
+            <Button variant="outline" onClick={() => setRetryToken((n) => n + 1)}>
               {t("error.retry")}
             </Button>
           )}
@@ -237,7 +273,9 @@ export default function TimelinePage() {
         <div className="space-y-6">
           {groupByDate(state.items).map((group) => (
             <div key={group.dateKey} className="space-y-2">
-              <h2 className="text-sm font-semibold text-muted">{formatDate(group.date)}</h2>
+              <h2 className="text-sm font-medium tabular-nums text-muted-foreground">
+                {formatDate(group.date)}
+              </h2>
               <ul className="space-y-2">
                 {group.rows.map((entry) => (
                   <EntryRow key={entry.id} entry={entry} />
@@ -247,13 +285,22 @@ export default function TimelinePage() {
           ))}
 
           {state.loadMoreError && (
-            <Callout tone="error" iconLabel={t("error.title")}>
-              {state.loadMoreError}
-            </Callout>
+            <Alert variant="destructive">
+              <TriangleAlertIcon />
+              <AlertTitle>{t("error.title")}</AlertTitle>
+              <AlertDescription>{state.loadMoreError}</AlertDescription>
+            </Alert>
           )}
 
           {state.nextCursor && (
-            <Button variant="secondary" loading={state.loadingMore} onClick={loadMore} className="w-full sm:w-auto">
+            <Button
+              variant="outline"
+              disabled={state.loadingMore}
+              aria-busy={state.loadingMore}
+              onClick={loadMore}
+              className="w-full sm:w-auto"
+            >
+              {state.loadingMore && <Spinner />}
               {state.loadingMore ? t("loadingMore") : t("loadMore")}
             </Button>
           )}
@@ -263,7 +310,7 @@ export default function TimelinePage() {
   );
 }
 
-// Distinct from the load-failure Callout above: "no entries" is a clean
+// Distinct from the load-failure Alert above: "no entries" is a clean
 // server response with `items: []`, not an error. A type filter narrows the
 // message to that type specifically (issue #33 scope).
 function EmptyState({ typeFilter }: { typeFilter: EntryType | "" }) {
@@ -275,10 +322,16 @@ function EmptyState({ typeFilter }: { typeFilter: EntryType | "" }) {
     ? t("emptyFiltered.body", { type: t(`entryTypes.${typeFilter}`) })
     : t("empty.body");
   return (
-    <Callout tone="info" iconLabel={title}>
-      <span className="block font-medium text-foreground">{title}</span>
-      <span>{body}</span>
-    </Callout>
+    <Empty className="border">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <ClockIcon />
+        </EmptyMedia>
+        <EmptyTitle>{title}</EmptyTitle>
+        <EmptyDescription>{body}</EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent />
+    </Empty>
   );
 }
 
@@ -290,23 +343,28 @@ function EntryRow({ entry }: { entry: EntrySummary }) {
     <li>
       <Link
         href={`/timeline/${entry.id}`}
-        className="flex items-start gap-3 rounded-xl border border-border bg-surface shadow-sm px-4 py-3 outline-none hover:bg-surface-raised focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+        className="flex min-h-11 items-center gap-3 rounded-xl border bg-card px-4 py-3 text-sm shadow-sm outline-none transition-colors hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50"
       >
-        <Icon className="mt-0.5 size-5 shrink-0 text-muted" />
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+          <Icon className="size-4" />
+        </span>
         <div className="min-w-0 flex-1 space-y-0.5">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="text-xs font-medium text-muted">{t(`entryTypes.${entry.entryType}`)}</span>
+            <span className="text-xs font-medium text-muted-foreground">
+              {t(`entryTypes.${entry.entryType}`)}
+            </span>
             {entry.isCritical && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-critical-border bg-critical-surface px-2 py-0.5 text-xs font-medium text-critical">
-                <AlertTriangleIcon className="size-3.5" />
+              <Badge variant="outline" className="gap-1 border-destructive/40 text-destructive">
+                <TriangleAlertIcon className="size-3.5" />
                 {t("critical")}
-              </span>
+              </Badge>
             )}
           </div>
           <p className="truncate text-sm text-foreground">
             {entry.summary ? <ClinicalText>{entry.summary}</ClinicalText> : "—"}
           </p>
         </div>
+        <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
       </Link>
     </li>
   );

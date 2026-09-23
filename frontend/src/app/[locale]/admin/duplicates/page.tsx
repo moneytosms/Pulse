@@ -2,11 +2,23 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { Callout } from "@/components/ui/Callout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { useRouter } from "@/i18n/navigation";
+import { TriangleAlertIcon } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Spinner } from "@/components/ui/spinner";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Link, useRouter } from "@/i18n/navigation";
 import type { DuplicateReviewCandidate, MergeRecord, MergeResult } from "@/lib/admin";
 import { api, ApiError } from "@/lib/api";
 import type { Me } from "@/lib/auth";
@@ -177,47 +189,77 @@ export default function DuplicateReviewPage() {
       .finally(() => setReversingId(null));
   }
 
-  if (gate.status === "loading") return <p className="text-sm text-muted">{t("loading")}</p>;
+  if (gate.status === "loading") return <p className="text-sm text-muted-foreground">{t("loading")}</p>;
   if (gate.status === "denied") {
     return (
-      <Callout tone="error" iconLabel={t("gate.title")}>
-        {t("gate.denied")}
-      </Callout>
+      <Alert variant="destructive">
+        <TriangleAlertIcon />
+        <AlertTitle>{t("gate.title")}</AlertTitle>
+        <AlertDescription>{t("gate.denied")}</AlertDescription>
+      </Alert>
     );
   }
   if (gate.status === "error") {
     return (
-      <Callout tone="error" iconLabel={t("gate.title")}>
-        {gate.message}
-      </Callout>
+      <Alert variant="destructive">
+        <TriangleAlertIcon />
+        <AlertTitle>{t("gate.title")}</AlertTitle>
+        <AlertDescription>{gate.message}</AlertDescription>
+      </Alert>
     );
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-8 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-300">
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href="/admin">{t("title")}</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{t("duplicateReview.title")}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold text-foreground">{t("duplicateReview.title")}</h1>
-        <p className="text-sm text-muted">{t("duplicateReview.description")}</p>
+        <h1 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
+          {t("duplicateReview.title")}
+        </h1>
+        <p className="text-pretty text-sm text-muted-foreground">{t("duplicateReview.description")}</p>
       </div>
 
       {actionError && (
-        <Callout tone="error" iconLabel={t("duplicateReview.actionErrorTitle")}>
-          {actionError}
-        </Callout>
+        <Alert variant="destructive">
+          <TriangleAlertIcon />
+          <AlertTitle>{t("duplicateReview.actionErrorTitle")}</AlertTitle>
+          <AlertDescription>{actionError}</AlertDescription>
+        </Alert>
       )}
 
-      {queue.status === "loading" && <p className="text-sm text-muted">{t("loading")}</p>}
+      {queue.status === "loading" && <p className="text-sm text-muted-foreground">{t("loading")}</p>}
 
       {queue.status === "error" && (
-        <Callout tone="error" iconLabel={t("duplicateReview.actionErrorTitle")}>
-          {queue.message}
-        </Callout>
+        <Alert variant="destructive">
+          <TriangleAlertIcon />
+          <AlertTitle>{t("duplicateReview.actionErrorTitle")}</AlertTitle>
+          <AlertDescription>{queue.message}</AlertDescription>
+        </Alert>
       )}
 
       {queue.status === "ready" && queue.items.length === 0 && (
-        <Callout tone="info" iconLabel={t("duplicateReview.emptyTitle")}>
-          {t("duplicateReview.empty")}
-        </Callout>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <TriangleAlertIcon />
+            </EmptyMedia>
+            <EmptyTitle>{t("duplicateReview.emptyTitle")}</EmptyTitle>
+            <EmptyDescription>{t("duplicateReview.empty")}</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
 
       {queue.status === "ready" &&
@@ -228,49 +270,56 @@ export default function DuplicateReviewPage() {
                 {t("duplicateReview.candidateTitle")}
               </CardTitle>
               <Badge variant="outline">
-                {t("duplicateReview.score", { score: candidate.score.toFixed(2) })}
+                <span className="tabular-nums">{t("duplicateReview.score", { score: candidate.score.toFixed(2) })}</span>
               </Badge>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {[candidate.patientA, candidate.patientB].map((p, idx) => (
-                  <div key={p.id} className="space-y-1 rounded-lg border border-border p-3 text-sm">
-                    <p className="text-xs font-semibold tracking-wide text-muted uppercase">
-                      {t("duplicateReview.candidateLabel", { n: idx + 1 })}
-                    </p>
-                    <p className="font-medium text-foreground">{p.fullName}</p>
-                    <p className="text-muted">
-                      {t("duplicateReview.fields.dateOfBirth")}: {formatDate(p.dateOfBirth) || "—"}
-                    </p>
-                    <p className="text-muted">
-                      {t("duplicateReview.fields.phone")}: {p.phone ?? "—"}
-                    </p>
-                    <p className="text-muted">
-                      {t("duplicateReview.fields.claimed")}:{" "}
-                      {p.claimed ? t("duplicateReview.claimedTrue") : t("duplicateReview.claimedFalse")}
-                    </p>
-                    <p className="text-muted">
-                      {t("duplicateReview.fields.entryCount")}: {p.entryCount}
-                    </p>
-                  </div>
-                ))}
-              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead></TableHead>
+                    <TableHead>{t("duplicateReview.fields.dateOfBirth")}</TableHead>
+                    <TableHead>{t("duplicateReview.fields.phone")}</TableHead>
+                    <TableHead>{t("duplicateReview.fields.claimed")}</TableHead>
+                    <TableHead>{t("duplicateReview.fields.entryCount")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {[candidate.patientA, candidate.patientB].map((p, idx) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="font-medium">
+                        <span className="block text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                          {t("duplicateReview.candidateLabel", { n: idx + 1 })}
+                        </span>
+                        {p.fullName}
+                      </TableCell>
+                      <TableCell className="tabular-nums">{formatDate(p.dateOfBirth) || "—"}</TableCell>
+                      <TableCell>{p.phone ?? "—"}</TableCell>
+                      <TableCell>
+                        {p.claimed ? t("duplicateReview.claimedTrue") : t("duplicateReview.claimedFalse")}
+                      </TableCell>
+                      <TableCell className="tabular-nums">{p.entryCount}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
 
               <div className="flex flex-wrap gap-3">
                 <Button
-                  variant="primary"
-                  loading={busyId === candidate.id && busyKind === "merge"}
                   disabled={busyId !== null}
+                  aria-busy={busyId === candidate.id && busyKind === "merge"}
                   onClick={() => merge(candidate)}
                 >
+                  {busyId === candidate.id && busyKind === "merge" && <Spinner />}
                   {t("duplicateReview.mergeCta")}
                 </Button>
                 <Button
-                  variant="secondary"
-                  loading={busyId === candidate.id && busyKind === "notDuplicate"}
+                  variant="outline"
                   disabled={busyId !== null}
+                  aria-busy={busyId === candidate.id && busyKind === "notDuplicate"}
                   onClick={() => markNotDuplicate(candidate)}
                 >
+                  {busyId === candidate.id && busyKind === "notDuplicate" && <Spinner />}
                   {t("duplicateReview.notDuplicateCta")}
                 </Button>
               </div>
@@ -284,32 +333,37 @@ export default function DuplicateReviewPage() {
             <CardTitle className="text-base">{t("duplicateReview.recentMerges.title")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-xs text-muted">{t("duplicateReview.recentMerges.hint")}</p>
-            <ul className="divide-y divide-border">
-              {merges.map((m) => (
-                <li key={m.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
-                  <span className="text-foreground">
-                    {t("duplicateReview.recentMerges.pair", { winner: m.winnerName, loser: m.loserName })}
-                    <span className="ml-2 text-muted">{formatDate(m.occurredAt)}</span>
-                    {m.reversedAt && (
-                      <Badge variant="outline" className="ml-2">
-                        {t("duplicateReview.recentMerges.reversed")}
-                      </Badge>
-                    )}
-                  </span>
-                  {!m.reversedAt && (
-                    <Button
-                      variant="secondary"
-                      loading={reversingId === m.id}
-                      disabled={reversingId !== null}
-                      onClick={() => reverseMerge(m.id)}
-                    >
-                      {t("duplicateReview.recentMerges.reverseCta")}
-                    </Button>
-                  )}
-                </li>
-              ))}
-            </ul>
+            <p className="text-xs text-muted-foreground">{t("duplicateReview.recentMerges.hint")}</p>
+            <Table>
+              <TableBody>
+                {merges.map((m) => (
+                  <TableRow key={m.id}>
+                    <TableCell>
+                      {t("duplicateReview.recentMerges.pair", { winner: m.winnerName, loser: m.loserName })}
+                      <span className="ml-2 tabular-nums text-muted-foreground">{formatDate(m.occurredAt)}</span>
+                      {m.reversedAt && (
+                        <Badge variant="outline" className="ml-2">
+                          {t("duplicateReview.recentMerges.reversed")}
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {!m.reversedAt && (
+                        <Button
+                          variant="outline"
+                          disabled={reversingId !== null}
+                          aria-busy={reversingId === m.id}
+                          onClick={() => reverseMerge(m.id)}
+                        >
+                          {reversingId === m.id && <Spinner />}
+                          {t("duplicateReview.recentMerges.reverseCta")}
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       )}

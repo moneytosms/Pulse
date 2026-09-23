@@ -4,30 +4,40 @@ import { use, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { BreakGlassBanner } from "@/components/BreakGlassBanner";
-import { Callout } from "@/components/ui/Callout";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ClinicalText } from "@/components/ClinicalText";
 import { DocumentViewer } from "@/components/DocumentViewer";
 import {
-  ClinicalNoteIcon,
-  DiagnosisIcon,
-  FlaskIcon,
-  PrescriptionIcon,
-  ProcedureIcon,
-} from "@/components/ui/icons";
-import { InlineLink } from "@/components/ui/InlineLink";
-import { NavLink } from "@/components/ui/NavLink";
-import { useRouter } from "@/i18n/navigation";
+  FlaskConicalIcon,
+  NotebookPenIcon,
+  PillIcon,
+  StethoscopeIcon,
+  SyringeIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
+import { Link, useRouter } from "@/i18n/navigation";
 import { api, ApiError } from "@/lib/api";
 import { useApiErrorMessage } from "@/lib/errors";
 import { formatDate } from "@/lib/format";
 import type { EntryDetail, EntryType } from "@/lib/records";
 
-const ENTRY_ICONS: Record<EntryType, typeof DiagnosisIcon> = {
-  DIAGNOSIS: DiagnosisIcon,
-  PRESCRIPTION: PrescriptionIcon,
-  LAB_REPORT: FlaskIcon,
-  PROCEDURE: ProcedureIcon,
-  CLINICAL_NOTE: ClinicalNoteIcon,
+const ENTRY_ICONS: Record<EntryType, typeof StethoscopeIcon> = {
+  DIAGNOSIS: StethoscopeIcon,
+  PRESCRIPTION: PillIcon,
+  LAB_REPORT: FlaskConicalIcon,
+  PROCEDURE: SyringeIcon,
+  CLINICAL_NOTE: NotebookPenIcon,
 };
 
 /**
@@ -47,11 +57,11 @@ function AbnormalMarker({ flag }: { flag: "high" | "low" }) {
   const t = useTranslations("timeline");
   const a = t.raw("detail.abnormal") as Record<string, string>;
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-critical-border bg-critical-surface px-2 py-0.5 text-xs font-semibold text-critical">
+    <Badge variant="destructive" className="gap-1">
       <span aria-hidden="true">{flag === "high" ? "▲" : "▼"}</span>
       <span>{flag === "high" ? a.high : a.low}</span>
       <span>{flag === "high" ? a.aboveRange : a.belowRange}</span>
-    </span>
+    </Badge>
   );
 }
 
@@ -104,23 +114,48 @@ export default function EntryDetailPage({
   }, [entryId]);
 
   return (
-    <section className="space-y-6">
-      <NavLink href="/timeline" icon="back">
-        {t("detail.back")}
-      </NavLink>
+    <section className="animate-in fade-in-0 slide-in-from-bottom-1 space-y-8 duration-300 motion-reduce:animate-none">
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href="/timeline">{t("title")}</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>
+              {state.status === "ready" ? t(`entryTypes.${state.entry.entryType}`) : t("detail.title")}
+            </BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
 
-      {state.status === "loading" && <p className="text-sm text-muted">{t("loading")}</p>}
+      <Button asChild variant="link" className="h-auto p-0">
+        <Link href="/timeline">{t("detail.back")}</Link>
+      </Button>
+
+      {state.status === "loading" && (
+        <div className="space-y-4" aria-hidden="true">
+          <p className="sr-only">{t("loading")}</p>
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-40 w-full rounded-xl" />
+        </div>
+      )}
 
       {state.status === "notFound" && (
-        <Callout tone="info" iconLabel={t("detail.title")}>
-          {t("detail.notFound")}
-        </Callout>
+        <Alert>
+          <AlertTitle>{t("detail.title")}</AlertTitle>
+          <AlertDescription>{t("detail.notFound")}</AlertDescription>
+        </Alert>
       )}
 
       {state.status === "error" && (
-        <Callout tone="error" iconLabel={t("error.title")}>
-          {state.message}
-        </Callout>
+        <Alert variant="destructive">
+          <TriangleAlertIcon />
+          <AlertTitle>{t("error.title")}</AlertTitle>
+          <AlertDescription>{state.message}</AlertDescription>
+        </Alert>
       )}
 
       {state.status === "ready" && (
@@ -136,8 +171,8 @@ export default function EntryDetailPage({
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid grid-cols-1 gap-1 px-4 py-3 sm:grid-cols-3 sm:gap-4">
-      <dt className="text-sm font-medium text-muted">{label}</dt>
-      <dd className="text-sm text-foreground sm:col-span-2">{children}</dd>
+      <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
+      <dd className="text-sm text-foreground tabular-nums sm:col-span-2">{children}</dd>
     </div>
   );
 }
@@ -195,23 +230,27 @@ function EntryDetailView({ entry }: { entry: EntryDetail }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Icon className="size-6 shrink-0 text-muted" />
-        <h1 className="text-2xl font-bold text-foreground">
+      <div className="flex items-center gap-3">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+          <Icon className="size-4" />
+        </span>
+        <h1 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
           {t(`entryTypes.${entry.entryType}`)}
         </h1>
       </div>
 
       {entry.supersedesId && (
-        <Callout tone="info" iconLabel={t("detail.title")}>
-          <span>{t("detail.correctsNotice")}</span>{" "}
-          <InlineLink href={`/timeline/${entry.supersedesId}`}>
-            {t("detail.viewPrevious")}
-          </InlineLink>
-        </Callout>
+        <Alert>
+          <AlertDescription>
+            <span>{t("detail.correctsNotice")}</span>{" "}
+            <Button asChild variant="link" className="h-auto p-0">
+              <Link href={`/timeline/${entry.supersedesId}`}>{t("detail.viewPrevious")}</Link>
+            </Button>
+          </AlertDescription>
+        </Alert>
       )}
 
-      <dl className="divide-y divide-border rounded-xl border border-border bg-surface shadow-sm">
+      <dl className="divide-y rounded-xl border bg-card shadow-sm">
         {rows.map(([label, value]) => (
           <Field key={label} label={label}>
             {value}
@@ -221,7 +260,7 @@ function EntryDetailView({ entry }: { entry: EntryDetail }) {
 
       {entry.documents.length > 0 && (
         <div className="space-y-2">
-          <h2 className="text-sm font-semibold text-muted">{f.documents}</h2>
+          <h2 className="text-sm font-semibold text-muted-foreground">{f.documents}</h2>
           <ul className="space-y-2">
             {entry.documents.map((doc) => (
               <DocumentViewer key={doc.id} doc={doc} />

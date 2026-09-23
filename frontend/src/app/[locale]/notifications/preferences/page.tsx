@@ -2,14 +2,36 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button } from "@/components/ui/Button";
-import { Callout } from "@/components/ui/Callout";
-import { Checkbox } from "@/components/ui/Checkbox";
-import { NavLink } from "@/components/ui/NavLink";
-import { useRouter } from "@/i18n/navigation";
+import { InfoIcon } from "lucide-react";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { Link, useRouter } from "@/i18n/navigation";
 import { api, ApiError } from "@/lib/api";
 import { useApiErrorMessage } from "@/lib/errors";
-import { MANDATORY_NOTIFICATION_TYPES, type NotificationPreference } from "@/lib/notifications";
+import {
+  MANDATORY_NOTIFICATION_TYPES,
+  NOTIFICATION_CHANNELS,
+  type NotificationPreference,
+} from "@/lib/notifications";
 
 type LoadState =
   | { status: "loading" }
@@ -32,20 +54,22 @@ function channelLabel(
   return t.has(key) ? t(key) : channel;
 }
 
-function PreferenceRow({
-  pref,
+function TypeCard({
+  type,
+  prefs,
   onSaved,
 }: {
-  pref: NotificationPreference;
+  type: string;
+  prefs: NotificationPreference[];
   onSaved: (updated: NotificationPreference) => void;
 }) {
   const t = useTranslations("notifications");
   const errorMessage = useApiErrorMessage();
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function toggle(enabled: boolean) {
-    setSaving(true);
+  async function toggle(pref: NotificationPreference, enabled: boolean) {
+    setSaving(pref.channel);
     setError(null);
     try {
       const updated = await api.put<NotificationPreference>("/notification-preferences", {
@@ -56,30 +80,69 @@ function PreferenceRow({
     } catch (err) {
       setError(errorMessage(err));
     } finally {
-      setSaving(false);
+      setSaving(null);
     }
   }
 
   return (
-    <li className="space-y-2 rounded-xl border border-border bg-surface shadow-sm px-4 py-3">
-      <div className="flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground">{typeLabel(pref.notificationType, t)}</p>
-          <p className="text-xs text-muted">{channelLabel(pref.channel, t)}</p>
-        </div>
-        <Checkbox checked={pref.enabled} onCheckedChange={toggle} disabled={saving} />
-      </div>
-      {error && (
-        <Callout tone="error" iconLabel={t("error.title")}>
-          {error}
-        </Callout>
-      )}
-    </li>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base font-medium">{typeLabel(type, t)}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {prefs.map((pref) => {
+          const id = `pref-${type}-${pref.channel}`;
+          return (
+            <div key={pref.channel} className="flex items-center justify-between gap-4">
+              <Label htmlFor={id} className="text-sm font-normal text-foreground">
+                {channelLabel(pref.channel, t)}
+              </Label>
+              <Switch
+                id={id}
+                checked={pref.enabled}
+                onCheckedChange={(checked) => toggle(pref, checked === true)}
+                disabled={saving === pref.channel}
+              />
+            </div>
+          );
+        })}
+        {error && (
+          <Alert variant="destructive">
+            <InfoIcon />
+            <AlertTitle>{t("error.title")}</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PreferencesSkeleton() {
+  return (
+    <div className="space-y-4" aria-hidden="true">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <Card key={i}>
+          <CardHeader>
+            <Skeleton className="h-4 w-32" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {NOTIFICATION_CHANNELS.map((c) => (
+              <div key={c} className="flex items-center justify-between gap-4">
+                <Skeleton className="h-4 w-16" />
+                <Skeleton className="h-5 w-8 rounded-full" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
   );
 }
 
 export default function NotificationPreferencesPage() {
   const t = useTranslations("notifications");
+  const tNav = useTranslations("nav");
   const errorMessage = useApiErrorMessage();
   const router = useRouter();
 
@@ -137,46 +200,79 @@ export default function NotificationPreferencesPage() {
       ? state.items.filter((pref) => !MANDATORY_NOTIFICATION_TYPES.has(pref.notificationType))
       : [];
 
+  // Group by type for the card-per-type layout — mobile-first (patient
+  // pages), so a table that scrolls horizontally at 375px is not an option.
+  // The preference list is small (a handful of types × channels), so a
+  // plain reduce on every render is cheaper than memoizing it.
+  const byType = new Map<string, NotificationPreference[]>();
+  for (const pref of visible) {
+    const existing = byType.get(pref.notificationType) ?? [];
+    existing.push(pref);
+    byType.set(pref.notificationType, existing);
+  }
+
   return (
-    <section className="space-y-6">
-      <div className="space-y-1">
-        <NavLink href="/notifications" icon="back">
-          {t("preferences.back")}
-        </NavLink>
-        <h1 className="text-2xl font-bold text-foreground">{t("preferences.title")}</h1>
-        <p className="text-sm text-muted">{t("preferences.subtitle")}</p>
+    <section className="animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-reduce:animate-none space-y-8">
+      <div className="space-y-3">
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink asChild>
+                <Link href="/notifications">{tNav("notifications")}</Link>
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>{t("preferences.title")}</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
+            {t("preferences.title")}
+          </h1>
+          <p className="text-sm text-pretty text-muted-foreground">{t("preferences.subtitle")}</p>
+        </div>
       </div>
 
-      {state.status === "loading" && <p className="text-sm text-muted">{t("preferences.loading")}</p>}
+      {state.status === "loading" && (
+        <>
+          <span className="sr-only">{t("preferences.loading")}</span>
+          <PreferencesSkeleton />
+        </>
+      )}
 
       {state.status === "error" && (
         <div className="space-y-3">
-          <Callout tone="error" iconLabel={t("error.title")}>
-            {state.message}
-          </Callout>
-          <Button variant="secondary" onClick={() => setRetryToken((n) => n + 1)}>
+          <Alert variant="destructive">
+            <InfoIcon />
+            <AlertTitle>{t("error.title")}</AlertTitle>
+            <AlertDescription>{state.message}</AlertDescription>
+          </Alert>
+          <Button variant="outline" onClick={() => setRetryToken((n) => n + 1)}>
             {t("error.retry")}
           </Button>
         </div>
       )}
 
       {state.status === "ready" && visible.length === 0 && (
-        <Callout tone="info" iconLabel={t("preferences.empty.title")}>
-          <span className="block font-medium text-foreground">{t("preferences.empty.title")}</span>
-          <span>{t("preferences.empty.body")}</span>
-        </Callout>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <InfoIcon />
+            </EmptyMedia>
+            <EmptyTitle>{t("preferences.empty.title")}</EmptyTitle>
+            <EmptyDescription>{t("preferences.empty.body")}</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
 
       {state.status === "ready" && visible.length > 0 && (
-        <ul className="space-y-3">
-          {visible.map((pref) => (
-            <PreferenceRow
-              key={`${pref.notificationType}:${pref.channel}`}
-              pref={pref}
-              onSaved={handleSaved}
-            />
+        <div className="space-y-4">
+          {Array.from(byType.entries()).map(([type, prefs]) => (
+            <TypeCard key={type} type={type} prefs={prefs} onSaved={handleSaved} />
           ))}
-        </ul>
+        </div>
       )}
     </section>
   );

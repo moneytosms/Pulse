@@ -1,23 +1,37 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useTranslations } from "next-intl";
-import { Button } from "@/components/ui/Button";
-import { Callout } from "@/components/ui/Callout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { FormField } from "@/components/ui/FormField";
-import { Label } from "@/components/ui/Label";
-import { Select } from "@/components/ui/Select";
-import { ClinicalText } from "@/components/ClinicalText";
 import {
-  AlertTriangleIcon,
-  ClinicalNoteIcon,
-  DiagnosisIcon,
-  FlaskIcon,
-  PrescriptionIcon,
-  ProcedureIcon,
-} from "@/components/ui/icons";
+  ActivityIcon,
+  ChevronRightIcon,
+  FlaskConicalIcon,
+  NotebookPenIcon,
+  PillIcon,
+  StethoscopeIcon,
+  SyringeIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
+import { ClinicalText } from "@/components/ClinicalText";
 import { Link, useRouter } from "@/i18n/navigation";
 import { api, ApiError } from "@/lib/api";
 import type { Me } from "@/lib/auth";
@@ -35,12 +49,12 @@ import { ENTRY_TYPES, type EntrySummary, type EntryType, type Page } from "@/lib
 // (.claude/rules/clinical-safety.md: a 403 would confirm the record exists).
 // A Clinician additionally gets the break-glass form under that 404: a
 // justified, audited, 60-minute emergency grant that notifies the Patient.
-const ENTRY_ICONS: Record<EntryType, typeof DiagnosisIcon> = {
-  DIAGNOSIS: DiagnosisIcon,
-  PRESCRIPTION: PrescriptionIcon,
-  LAB_REPORT: FlaskIcon,
-  PROCEDURE: ProcedureIcon,
-  CLINICAL_NOTE: ClinicalNoteIcon,
+const ENTRY_ICONS: Record<EntryType, typeof StethoscopeIcon> = {
+  DIAGNOSIS: StethoscopeIcon,
+  PRESCRIPTION: PillIcon,
+  LAB_REPORT: FlaskConicalIcon,
+  PROCEDURE: SyringeIcon,
+  CLINICAL_NOTE: NotebookPenIcon,
 };
 
 const LIMIT = 20;
@@ -65,21 +79,6 @@ function entriesQuery(entryType: EntryType | "", cursor?: string): string {
   return params.toString();
 }
 
-function groupByDate(items: EntrySummary[]): Array<{ dateKey: string; date: Date; rows: EntrySummary[] }> {
-  const groups: Array<{ dateKey: string; date: Date; rows: EntrySummary[] }> = [];
-  for (const item of items) {
-    const date = new Date(item.occurredAt);
-    const dateKey = date.toDateString();
-    const last = groups[groups.length - 1];
-    if (last && last.dateKey === dateKey) {
-      last.rows.push(item);
-    } else {
-      groups.push({ dateKey, date, rows: [item] });
-    }
-  }
-  return groups;
-}
-
 export default function ClinicianPatientRecordsPage({
   params,
 }: {
@@ -90,6 +89,7 @@ export default function ClinicianPatientRecordsPage({
   const tTimeline = useTranslations("timeline");
   const errorMessage = useApiErrorMessage();
   const router = useRouter();
+  const filterId = useId();
 
   const [typeFilter, setTypeFilter] = useState<EntryType | "">("");
   const [retryToken, setRetryToken] = useState(0);
@@ -171,32 +171,51 @@ export default function ClinicianPatientRecordsPage({
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-8 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-300">
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold text-foreground">{t("title")}</h1>
-        <p className="text-sm text-muted">{t("subtitle")}</p>
+        <h1 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">{t("title")}</h1>
+        <p className="text-pretty text-sm text-muted-foreground">{t("subtitle")}</p>
       </div>
 
       <div className="max-w-xs space-y-1.5">
-        <Label htmlFor="clinician-entry-type-filter">{tTimeline("filter.label")}</Label>
+        <Label htmlFor={filterId}>{tTimeline("filter.label")}</Label>
         <Select
-          id="clinician-entry-type-filter"
           value={typeFilter || ALL_TYPES}
           onValueChange={(value) => setTypeFilter(value === ALL_TYPES ? "" : (value as EntryType))}
-          placeholder={tTimeline("filter.label")}
-          options={[
-            { value: ALL_TYPES, label: tTimeline("filter.all") },
-            ...ENTRY_TYPES.map((type) => ({ value: type, label: tTimeline(`entryTypes.${type}`) })),
-          ]}
-        />
+        >
+          <SelectTrigger id={filterId} className="w-full">
+            <SelectValue placeholder={tTimeline("filter.label")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL_TYPES}>{tTimeline("filter.all")}</SelectItem>
+            {ENTRY_TYPES.map((type) => (
+              <SelectItem key={type} value={type}>
+                {tTimeline(`entryTypes.${type}`)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      {state.status === "loading" && <p className="text-sm text-muted">{t("loading")}</p>}
+      {state.status === "loading" && (
+        <div className="space-y-2">
+          <span className="sr-only">{t("loading")}</span>
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      )}
 
       {state.status === "notFound" && (
-        <Callout tone="info" iconLabel={t("notFound.title")}>
-          {t("notFound.body")}
-        </Callout>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <TriangleAlertIcon />
+            </EmptyMedia>
+            <EmptyTitle>{t("notFound.title")}</EmptyTitle>
+            <EmptyDescription>{t("notFound.body")}</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
 
       {state.status === "notFound" && role === "CLINICIAN" && (
@@ -205,43 +224,64 @@ export default function ClinicianPatientRecordsPage({
 
       {state.status === "error" && (
         <div className="space-y-3">
-          <Callout tone="error" iconLabel={t("error.title")}>
-            {state.message}
-          </Callout>
-          <Button variant="secondary" onClick={() => setRetryToken((n) => n + 1)}>
+          <Alert variant="destructive">
+            <TriangleAlertIcon />
+            <AlertTitle>{t("error.title")}</AlertTitle>
+            <AlertDescription>{state.message}</AlertDescription>
+          </Alert>
+          <Button variant="outline" onClick={() => setRetryToken((n) => n + 1)}>
             {t("error.retry")}
           </Button>
         </div>
       )}
 
       {state.status === "ready" && state.items.length === 0 && (
-        <Callout tone="info" iconLabel={t("empty.title")}>
-          <span className="block font-medium text-foreground">{t("empty.title")}</span>
-          <span>{t("empty.body")}</span>
-        </Callout>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <ActivityIcon />
+            </EmptyMedia>
+            <EmptyTitle>{t("empty.title")}</EmptyTitle>
+            <EmptyDescription>{t("empty.body")}</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
 
       {state.status === "ready" && state.items.length > 0 && (
-        <div className="space-y-6">
-          {groupByDate(state.items).map((group) => (
-            <div key={group.dateKey} className="space-y-2">
-              <h2 className="text-sm font-semibold text-muted">{formatDate(group.date)}</h2>
-              <ul className="space-y-2">
-                {group.rows.map((entry) => (
-                  <EntryRow key={entry.id} entry={entry} patientId={patientId} />
-                ))}
-              </ul>
-            </div>
-          ))}
+        <div className="space-y-4">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{tTimeline("detail.fields.occurredAt")}</TableHead>
+                <TableHead>{tTimeline("filter.label")}</TableHead>
+                <TableHead>{t("title")}</TableHead>
+                <TableHead className="w-8" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {state.items.map((entry) => (
+                <EntryRow key={entry.id} entry={entry} patientId={patientId} />
+              ))}
+            </TableBody>
+          </Table>
 
           {state.loadMoreError && (
-            <Callout tone="error" iconLabel={t("error.title")}>
-              {state.loadMoreError}
-            </Callout>
+            <Alert variant="destructive">
+              <TriangleAlertIcon />
+              <AlertTitle>{t("error.title")}</AlertTitle>
+              <AlertDescription>{state.loadMoreError}</AlertDescription>
+            </Alert>
           )}
 
           {state.nextCursor && (
-            <Button variant="secondary" loading={state.loadingMore} onClick={loadMore} className="w-full sm:w-auto">
+            <Button
+              variant="outline"
+              disabled={state.loadingMore}
+              aria-busy={state.loadingMore}
+              onClick={loadMore}
+              className="w-full sm:w-auto"
+            >
+              {state.loadingMore && <Spinner />}
               {state.loadingMore ? t("loadingMore") : t("loadMore")}
             </Button>
           )}
@@ -257,12 +297,16 @@ function BreakGlassForm({ patientId, onGranted }: { patientId: string; onGranted
   const [justification, setJustification] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const fieldId = useId();
+  const errorId = useId();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   function onSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
     if (!justification.trim()) {
       setError(t("required"));
+      textareaRef.current?.focus();
       return;
     }
     setSubmitting(true);
@@ -277,32 +321,29 @@ function BreakGlassForm({ patientId, onGranted }: { patientId: string; onGranted
     <Card className="max-w-lg border-critical-border">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <AlertTriangleIcon className="size-5 text-critical" />
+          <TriangleAlertIcon className="size-5 text-critical" />
           {t("title")}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <p className="text-sm text-muted">{t("body")}</p>
-        {error && (
-          <Callout tone="error" iconLabel={t("title")}>
-            {error}
-          </Callout>
-        )}
+        <p className="text-sm text-muted-foreground">{t("body")}</p>
         <form onSubmit={onSubmit} noValidate className="space-y-4">
-          <FormField label={t("justification")}>
-            {({ invalid, ...props }) => (
-              <textarea
-                {...props}
-                aria-invalid={invalid || undefined}
-                value={justification}
-                onChange={(e) => setJustification(e.target.value)}
-                rows={3}
-                maxLength={2000}
-                className="block w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-              />
-            )}
-          </FormField>
-          <Button type="submit" variant="secondary" loading={submitting}>
+          <Field data-invalid={error ? true : undefined}>
+            <FieldLabel htmlFor={fieldId}>{t("justification")}</FieldLabel>
+            <Textarea
+              ref={textareaRef}
+              id={fieldId}
+              value={justification}
+              onChange={(e) => setJustification(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              aria-invalid={error ? true : undefined}
+              aria-describedby={error ? errorId : undefined}
+            />
+            {error && <FieldError id={errorId}>{error}</FieldError>}
+          </Field>
+          <Button type="submit" variant="outline" disabled={submitting} aria-busy={submitting}>
+            {submitting && <Spinner />}
             {t("submit")}
           </Button>
         </form>
@@ -313,30 +354,45 @@ function BreakGlassForm({ patientId, onGranted }: { patientId: string; onGranted
 
 function EntryRow({ entry, patientId }: { entry: EntrySummary; patientId: string }) {
   const t = useTranslations("timeline");
+  const router = useRouter();
   const Icon = ENTRY_ICONS[entry.entryType];
+  const href = `/patients/${patientId}/records/${entry.id}` as const;
 
   return (
-    <li>
-      <Link
-        href={`/patients/${patientId}/records/${entry.id}`}
-        className="flex items-start gap-3 rounded-xl border border-border bg-surface shadow-sm px-4 py-3 outline-none hover:bg-surface-raised focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-      >
-        <Icon className="mt-0.5 size-5 shrink-0 text-muted" />
-        <div className="min-w-0 flex-1 space-y-0.5">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="text-xs font-medium text-muted">{t(`entryTypes.${entry.entryType}`)}</span>
-            {entry.isCritical && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-critical-border bg-critical-surface px-2 py-0.5 text-xs font-medium text-critical">
-                <AlertTriangleIcon className="size-3.5" />
-                {t("critical")}
-              </span>
-            )}
-          </div>
-          <p className="truncate text-sm text-foreground">
-            {entry.summary ? <ClinicalText>{entry.summary}</ClinicalText> : "—"}
-          </p>
-        </div>
-      </Link>
-    </li>
+    <TableRow
+      tabIndex={0}
+      role="link"
+      onClick={() => router.push(href)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") router.push(href);
+      }}
+      className="cursor-pointer outline-none focus-visible:bg-muted/50 focus-visible:ring-[3px] focus-visible:ring-ring/50"
+    >
+      <TableCell className="tabular-nums text-muted-foreground">{formatDate(entry.occurredAt)}</TableCell>
+      <TableCell>
+        <span className="flex items-center gap-1.5">
+          <Icon className="size-4 shrink-0 text-muted-foreground" />
+          {t(`entryTypes.${entry.entryType}`)}
+          {entry.isCritical && (
+            <Badge variant="outline" className="gap-1 border-critical-border bg-critical-surface text-critical">
+              <TriangleAlertIcon />
+              {t("critical")}
+            </Badge>
+          )}
+        </span>
+      </TableCell>
+      <TableCell className="whitespace-normal">
+        <Link
+          href={href}
+          onClick={(e) => e.stopPropagation()}
+          className="font-medium text-primary underline-offset-4 hover:underline"
+        >
+          {entry.summary ? <ClinicalText>{entry.summary}</ClinicalText> : "—"}
+        </Link>
+      </TableCell>
+      <TableCell>
+        <ChevronRightIcon className="size-4 text-muted-foreground" />
+      </TableCell>
+    </TableRow>
   );
 }

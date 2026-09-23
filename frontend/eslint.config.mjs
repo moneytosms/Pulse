@@ -25,12 +25,12 @@ const eslintConfig = [
         {
           selector: `Literal[value=${HEX_COLOUR}]`,
           message:
-            "No hex colour literals in components. Use a semantic token utility (see src/styles/tokens.css).",
+            "No hex colour literals in components. Use a semantic token utility (see src/app/globals.css).",
         },
         {
           selector: `TemplateElement[value.raw=${HEX_COLOUR}]`,
           message:
-            "No hex colour literals in components. Use a semantic token utility (see src/styles/tokens.css).",
+            "No hex colour literals in components. Use a semantic token utility (see src/app/globals.css).",
         },
       ],
     },

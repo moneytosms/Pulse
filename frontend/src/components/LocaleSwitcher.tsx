@@ -2,10 +2,19 @@
 
 import { useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { LanguagesIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { usePathname, useRouter } from "@/i18n/navigation";
 import { routing } from "@/i18n/routing";
 import { api } from "@/lib/api";
-import { cn } from "@/lib/cn";
 
 // Each language labelled in its own name, so a reader can always find their
 // own regardless of the language the page is currently in.
@@ -27,37 +36,38 @@ export function LocaleSwitcher() {
   const [isPending, startTransition] = useTransition();
 
   return (
-    <div
-      className="inline-flex overflow-hidden rounded-md border border-border-strong"
-      role="group"
-      aria-label={t("label")}
-    >
-      {routing.locales.map((locale) => {
-        const active = locale === activeLocale;
-        return (
-          <button
-            key={locale}
-            type="button"
-            lang={locale}
-            aria-current={active ? "true" : undefined}
-            disabled={active || isPending}
-            onClick={() =>
-              startTransition(() => {
-                api.put("/users/me/locale", { locale }).catch(() => {});
-                router.replace(pathname, { locale });
-              })
-            }
-            className={cn(
-              "min-h-9 px-3 py-1 text-sm font-medium transition-colors",
-              active
-                ? "bg-accent text-accent-contrast"
-                : "bg-surface text-accent-text hover:bg-accent-subtle",
-            )}
-          >
-            {AUTONYMS[locale] ?? locale}
-          </button>
-        );
-      })}
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={t("label")}
+          disabled={isPending}
+        >
+          <LanguagesIcon />
+          <span lang={activeLocale}>
+            {AUTONYMS[activeLocale] ?? activeLocale}
+          </span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>{t("label")}</DropdownMenuLabel>
+        <DropdownMenuRadioGroup
+          value={activeLocale}
+          onValueChange={(locale) =>
+            startTransition(() => {
+              api.put("/users/me/locale", { locale }).catch(() => {});
+              router.replace(pathname, { locale });
+            })
+          }
+        >
+          {routing.locales.map((locale) => (
+            <DropdownMenuRadioItem key={locale} value={locale} lang={locale}>
+              {AUTONYMS[locale] ?? locale}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

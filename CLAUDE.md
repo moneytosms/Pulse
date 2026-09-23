@@ -2,7 +2,7 @@
 
 > A lifelong electronic health record platform. Patients own their medical history; providers contribute to it; clinicians read it only with the patient's consent, and every access is recorded.
 
-Academic project, four-person team, Indian demographic, four locales. **Never touches real patient data.** Architecture is locked. **Phase 0 and Phase 1 are complete** (identity, auth, sessions, seed pipeline, patient profile, enforcement lints, CI); Phase 2 (records spine) is next — see [`docs/delivery-plan.md`](docs/delivery-plan.md).
+Academic project, four-person team, Indian demographic, four locales. **Never touches real patient data.** Architecture is locked. **Phases 0–4 are built** (identity, records spine, consent/audit/notifications, analytics/admin/dedup, four locales); what remains is P4.5 packaging (#56: locale review, Playwright in CI, demo rehearsal) — see [`docs/delivery-plan.md`](docs/delivery-plan.md).
 
 Read [`CONTEXT.md`](CONTEXT.md) before using any domain term — Patient, Consent, Permission and Medical Entry all mean something specific here.
 
@@ -81,7 +81,7 @@ docs/               All project documentation. Start at docs/README-less index b
   agents/ commands/ hooks/   Agent definitions, slash commands, lifecycle hooks.
 ```
 
-Planned, not yet scaffolded — `backend/app/{core,db,modules,adapters}`, `frontend/src`, `seed/`, `compose.yaml`, `Caddyfile`. Layout is specified in `docs/delivery-plan.md` (Phase 0).
+Scaffolded: `backend/app/{core,db,modules,adapters}`, `frontend/src` (shadcn/ui in `src/components/ui`, theme in `src/app/globals.css`), `seed/`, `compose.yaml`, `Caddyfile`.
 
 ## Scoped rules
 

@@ -79,6 +79,8 @@ Phase 0 (verified 2026-08-22) recorded `next build` failing while prerendering `
 
 Re-verified 2026-09-08 against the Phase 1 tree: **`next build` exits 0** and prerenders every page. The committed `frontend/src/app/global-error.tsx` is a plain custom component (present since Phase 0), which is what sidesteps the crashing stock code path — the original note was written against a barer state and not revisited. `next build` is now part of CI's frontend job. Keep an eye on it across `16.x` bumps; if it regresses, the workaround is still "there isn't one, pin back".
 
+Re-verified 2026-09-23: the same `/_global-error` `useContext` crash reproduces on `main` when the shell exports `NODE_ENV=development`, and `next build` exits 0 with `NODE_ENV=production npm run build`. A non-production `NODE_ENV` makes Next prerender with development React while the build expects production, so the crash was environmental, not upstream. If it shows up locally, check `echo $NODE_ENV` first. CI does not set it, so it is unaffected.
+
 Unrelated: `next build` prints a deprecation warning for the `middleware` file convention (renamed `proxy` in 16.x). Non-blocking; the `next-intl` middleware still works. Migrate with `npx @next/codemod@canary middleware-to-proxy .` when convenient.
 
 ### postgres:18 changed its data volume mount point

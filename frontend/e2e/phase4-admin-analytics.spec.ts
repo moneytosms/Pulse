@@ -209,5 +209,8 @@ test("admin duplicate review lists a candidate and merges it", async ({ page }) 
   await page.reload();
   await expect(page.getByText("Anand K.")).toBeVisible();
   await page.getByRole("button", { name: "Reverse merge" }).click();
-  await expect(page.getByText("Reversed")).toBeVisible();
+  // Exact match: the reversible-merges hint copy ("...not yet reversed...")
+  // is a substring match for "Reversed" too, so a loose getByText resolves
+  // to both. Same intent, unambiguous selector.
+  await expect(page.getByText("Reversed", { exact: true })).toBeVisible();
 });

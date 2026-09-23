@@ -3,14 +3,29 @@
 import { useId, useState } from "react";
 import type { FormEvent } from "react";
 import { useTranslations } from "next-intl";
-import { Button } from "@/components/ui/Button";
-import { Callout } from "@/components/ui/Callout";
-import { Checkbox } from "@/components/ui/Checkbox";
-import { FormField } from "@/components/ui/FormField";
-import { Input } from "@/components/ui/Input";
-import { Label } from "@/components/ui/Label";
-import { NavLink } from "@/components/ui/NavLink";
-import { Select } from "@/components/ui/Select";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
+import { Link } from "@/i18n/navigation";
 import { api, ApiError } from "@/lib/api";
 import {
   CONSENT_PURPOSES,
@@ -113,45 +128,74 @@ export default function GrantConsentPage() {
   if (granted) {
     return (
       <section className="mx-auto max-w-lg space-y-4">
-        <Callout tone="success" iconLabel={t("new.success.title")}>
-          {t("new.success.body")}
-        </Callout>
-        <NavLink href="/consent" icon="forward">
-          {t("new.success.viewConsents")}
-        </NavLink>
+        <Alert className="border-consent-active/40 text-consent-active">
+          <AlertTitle>{t("new.success.title")}</AlertTitle>
+          <AlertDescription>{t("new.success.body")}</AlertDescription>
+        </Alert>
+        <Button asChild variant="link" className="px-0">
+          <Link href="/consent">{t("new.success.viewConsents")}</Link>
+        </Button>
       </section>
     );
   }
 
+  const granteeEmailId = `${formId}-grantee-email`;
+  const purposeTriggerId = `${formId}-purpose`;
+  const purposeTextId = `${formId}-purpose-text`;
+  const fromDateId = `${formId}-from-date`;
+  const toDateId = `${formId}-to-date`;
+  const expiresAtId = `${formId}-expires-at`;
+
   return (
-    <section className="mx-auto max-w-lg space-y-6">
+    <section className="animate-in fade-in-0 slide-in-from-bottom-1 motion-reduce:animate-none mx-auto max-w-lg space-y-8 duration-300">
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href="/consent">{t("list.title")}</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{t("new.title")}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold text-foreground">{t("new.title")}</h1>
-        <p className="text-sm text-muted">{t("new.subtitle")}</p>
+        <h1 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
+          {t("new.title")}
+        </h1>
+        <p className="text-pretty text-sm text-muted-foreground">{t("new.subtitle")}</p>
       </div>
 
       {formError && (
-        <Callout tone="error" iconLabel={t("new.title")}>
-          {formError}
-        </Callout>
+        <Alert variant="destructive">
+          <AlertTitle>{t("new.title")}</AlertTitle>
+          <AlertDescription>{formError}</AlertDescription>
+        </Alert>
       )}
 
       <form onSubmit={onSubmit} noValidate className="space-y-4">
-        <FormField label={f.granteeEmail} error={errors.granteeUserId}>
-          {(props) => (
-            <Input
-              {...props}
-              type="email"
-              autoComplete="off"
-              value={granteeEmail}
-              onChange={(e) => setGranteeEmail(e.target.value)}
-            />
+        <Field data-invalid={!!errors.granteeUserId}>
+          <FieldLabel htmlFor={granteeEmailId}>{f.granteeEmail}</FieldLabel>
+          <Input
+            id={granteeEmailId}
+            type="email"
+            autoComplete="off"
+            aria-invalid={!!errors.granteeUserId}
+            aria-describedby={errors.granteeUserId ? `${granteeEmailId}-error` : undefined}
+            value={granteeEmail}
+            onChange={(e) => setGranteeEmail(e.target.value)}
+          />
+          {errors.granteeUserId && (
+            <FieldError id={`${granteeEmailId}-error`}>{errors.granteeUserId}</FieldError>
           )}
-        </FormField>
+        </Field>
 
         <div className="space-y-1.5">
           <Label>{f.entryTypes}</Label>
-          <p className="text-xs text-muted">{f.entryTypesHint}</p>
+          <p className="text-xs text-muted-foreground">{f.entryTypesHint}</p>
           <ul className="space-y-2">
             {ENTRY_TYPES.map((type) => {
               const checkboxId = `${formId}-type-${type}`;
@@ -160,71 +204,109 @@ export default function GrantConsentPage() {
                   <Checkbox
                     id={checkboxId}
                     checked={selectedTypes.has(type)}
-                    onCheckedChange={(checked) => toggleType(type, checked)}
+                    onCheckedChange={(checked) => toggleType(type, checked === true)}
                   />
-                  <label htmlFor={checkboxId} className="text-sm text-foreground">
+                  <Label htmlFor={checkboxId} className="font-normal text-foreground">
                     {tTimeline(`entryTypes.${type}`)}
-                  </label>
+                  </Label>
                 </li>
               );
             })}
           </ul>
         </div>
 
-        <FormField label={f.fromDate} error={errors.fromDate}>
-          {(props) => (
-            <Input {...props} type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
-          )}
-        </FormField>
+        <Field data-invalid={!!errors.fromDate}>
+          <FieldLabel htmlFor={fromDateId}>{f.fromDate}</FieldLabel>
+          <Input
+            id={fromDateId}
+            type="date"
+            aria-invalid={!!errors.fromDate}
+            aria-describedby={errors.fromDate ? `${fromDateId}-error` : undefined}
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+          />
+          {errors.fromDate && <FieldError id={`${fromDateId}-error`}>{errors.fromDate}</FieldError>}
+        </Field>
 
-        <FormField label={f.toDate} error={errors.toDate}>
-          {(props) => (
-            <Input {...props} type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
-          )}
-        </FormField>
+        <Field data-invalid={!!errors.toDate}>
+          <FieldLabel htmlFor={toDateId}>{f.toDate}</FieldLabel>
+          <Input
+            id={toDateId}
+            type="date"
+            aria-invalid={!!errors.toDate}
+            aria-describedby={errors.toDate ? `${toDateId}-error` : undefined}
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+          />
+          {errors.toDate && <FieldError id={`${toDateId}-error`}>{errors.toDate}</FieldError>}
+        </Field>
 
-        <FormField label={f.purpose} error={errors.purpose}>
-          {(props) => (
-            <Select
-              {...props}
-              value={purpose || undefined}
-              onValueChange={(value) => setPurpose(value as ConsentPurpose)}
-              placeholder={f.purpose}
-              options={CONSENT_PURPOSES.map((p) => ({
-                value: p,
-                label: t(`list.purpose.${p}`),
-              }))}
-            />
-          )}
-        </FormField>
+        <Field data-invalid={!!errors.purpose}>
+          <FieldLabel htmlFor={purposeTriggerId}>{f.purpose}</FieldLabel>
+          <Select value={purpose ?? ""} onValueChange={(value) => setPurpose(value as ConsentPurpose)}>
+            <SelectTrigger
+              id={purposeTriggerId}
+              aria-label={f.purpose}
+              aria-invalid={!!errors.purpose}
+              aria-describedby={errors.purpose ? `${purposeTriggerId}-error` : undefined}
+              className="w-full"
+            >
+              <SelectValue placeholder={f.purpose} />
+            </SelectTrigger>
+            <SelectContent>
+              {CONSENT_PURPOSES.map((p) => (
+                <SelectItem key={p} value={p}>
+                  {t(`list.purpose.${p}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {errors.purpose && <FieldError id={`${purposeTriggerId}-error`}>{errors.purpose}</FieldError>}
+        </Field>
 
         {purpose === "OTHER" && (
-          <FormField label={f.purposeText} error={errors.purposeText}>
-            {(props) => (
-              <Input {...props} value={purposeText} onChange={(e) => setPurposeText(e.target.value)} />
+          <Field data-invalid={!!errors.purposeText}>
+            <FieldLabel htmlFor={purposeTextId}>{f.purposeText}</FieldLabel>
+            <Input
+              id={purposeTextId}
+              aria-invalid={!!errors.purposeText}
+              aria-describedby={errors.purposeText ? `${purposeTextId}-error` : undefined}
+              value={purposeText}
+              onChange={(e) => setPurposeText(e.target.value)}
+            />
+            {errors.purposeText && (
+              <FieldError id={`${purposeTextId}-error`}>{errors.purposeText}</FieldError>
             )}
-          </FormField>
+          </Field>
         )}
 
-        <FormField label={f.expiresAt} error={errors.expiresAt}>
-          {(props) => (
-            <Input
-              {...props}
-              type="datetime-local"
-              value={expiresAt}
-              onChange={(e) => setExpiresAt(e.target.value)}
-            />
-          )}
-        </FormField>
+        <Field data-invalid={!!errors.expiresAt}>
+          <FieldLabel htmlFor={expiresAtId}>{f.expiresAt}</FieldLabel>
+          <Input
+            id={expiresAtId}
+            type="datetime-local"
+            aria-invalid={!!errors.expiresAt}
+            aria-describedby={errors.expiresAt ? `${expiresAtId}-error` : undefined}
+            value={expiresAt}
+            onChange={(e) => setExpiresAt(e.target.value)}
+          />
+          {errors.expiresAt && <FieldError id={`${expiresAtId}-error`}>{errors.expiresAt}</FieldError>}
+        </Field>
 
-        <Button type="submit" loading={submitting} className="w-full">
+        <Button
+          type="submit"
+          disabled={submitting}
+          aria-busy={submitting}
+          className="min-h-11 w-full sm:min-h-8"
+        >
+          {submitting && <Spinner />}
           {submitting ? t("new.submitting") : t("new.submit")}
         </Button>
       </form>
 
-      <NavLink href="/consent" icon="back">
-        {t("new.back")}
-      </NavLink>
+      <Button asChild variant="link" className="min-h-11 px-0 sm:min-h-8">
+        <Link href="/consent">{t("new.back")}</Link>
+      </Button>
     </section>
   );
 }

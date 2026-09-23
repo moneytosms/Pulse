@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Callout } from "@/components/ui/Callout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { TriangleAlertIcon } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link, useRouter } from "@/i18n/navigation";
 import { api, ApiError } from "@/lib/api";
 import type { Me } from "@/lib/auth";
@@ -53,42 +55,49 @@ export default function AdminDashboardPage() {
   }, []);
 
   if (gate.status === "loading") {
-    return <p className="text-sm text-muted">{t("loading")}</p>;
+    return <p className="text-sm text-muted-foreground">{t("loading")}</p>;
   }
   if (gate.status === "denied") {
     return (
-      <Callout tone="error" iconLabel={t("gate.title")}>
-        {t("gate.denied")}
-      </Callout>
+      <Alert variant="destructive">
+        <TriangleAlertIcon />
+        <AlertTitle>{t("gate.title")}</AlertTitle>
+        <AlertDescription>{t("gate.denied")}</AlertDescription>
+      </Alert>
     );
   }
   if (gate.status === "error") {
     return (
-      <Callout tone="error" iconLabel={t("gate.title")}>
-        {gate.message}
-      </Callout>
+      <Alert variant="destructive">
+        <TriangleAlertIcon />
+        <AlertTitle>{t("gate.title")}</AlertTitle>
+        <AlertDescription>{gate.message}</AlertDescription>
+      </Alert>
     );
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-8 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-300">
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold text-foreground">{t("title")}</h1>
-        <p className="text-sm text-muted">{t("subtitle")}</p>
+        <h1 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">{t("title")}</h1>
+        <p className="text-pretty text-sm text-muted-foreground">{t("subtitle")}</p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>{t("duplicateReview.title")}</CardTitle>
+          {/* CardTitle renders a div (shadcn); this heading is asserted by
+              e2e/phase4-admin-analytics.spec.ts via getByRole("heading"), so
+              it needs real heading semantics — not something a className
+              change on CardTitle can fix without touching ui/card.tsx. */}
+          <CardTitle role="heading" aria-level={2}>
+            {t("duplicateReview.title")}
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-sm text-muted">{t("duplicateReview.description")}</p>
-          <Link
-            href="/admin/duplicates"
-            className="inline-flex min-h-11 items-center rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-contrast shadow-sm transition-colors hover:bg-accent-hover"
-          >
-            {t("duplicateReview.cta")}
-          </Link>
+          <p className="text-sm text-muted-foreground">{t("duplicateReview.description")}</p>
+          <Button asChild>
+            <Link href="/admin/duplicates">{t("duplicateReview.cta")}</Link>
+          </Button>
         </CardContent>
       </Card>
     </section>

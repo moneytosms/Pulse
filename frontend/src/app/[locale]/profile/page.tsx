@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Callout } from "@/components/ui/Callout";
-import { NavLink } from "@/components/ui/NavLink";
+import { InfoIcon } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from "@/i18n/navigation";
 import { routing } from "@/i18n/routing";
 import { api, ApiError } from "@/lib/api";
@@ -34,6 +36,21 @@ type LoadState =
   | { status: "ready"; profile: PatientProfile }
   | { status: "notFound" }
   | { status: "error"; message: string };
+
+function ProfileSkeleton() {
+  return (
+    <Card aria-hidden="true">
+      <CardContent className="divide-y divide-border p-0">
+        {Array.from({ length: 9 }).map((_, i) => (
+          <div key={i} className="grid grid-cols-1 gap-1 px-4 py-3 sm:grid-cols-3 sm:gap-4">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-4 w-40 sm:col-span-2" />
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function ProfilePage() {
   const t = useTranslations("profile");
@@ -68,21 +85,46 @@ export default function ProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const header = (
+    <div className="space-y-1">
+      <h1 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
+        {t("title")}
+      </h1>
+      <p className="text-sm text-pretty text-muted-foreground">{t("subtitle")}</p>
+    </div>
+  );
+
   if (state.status === "loading") {
-    return <p className="text-sm text-muted">{t("loading")}</p>;
+    return (
+      <section className="animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-reduce:animate-none space-y-8">
+        {header}
+        <span className="sr-only">{t("loading")}</span>
+        <ProfileSkeleton />
+      </section>
+    );
   }
   if (state.status === "notFound") {
     return (
-      <Callout tone="info" iconLabel={t("title")}>
-        {t("notFound")}
-      </Callout>
+      <section className="space-y-8">
+        {header}
+        <Alert>
+          <InfoIcon />
+          <AlertTitle>{t("title")}</AlertTitle>
+          <AlertDescription>{t("notFound")}</AlertDescription>
+        </Alert>
+      </section>
     );
   }
   if (state.status === "error") {
     return (
-      <Callout tone="error" iconLabel={t("title")}>
-        {state.message}
-      </Callout>
+      <section className="space-y-8">
+        {header}
+        <Alert variant="destructive">
+          <InfoIcon />
+          <AlertTitle>{t("title")}</AlertTitle>
+          <AlertDescription>{state.message}</AlertDescription>
+        </Alert>
+      </section>
     );
   }
 
@@ -107,38 +149,25 @@ export default function ProfilePage() {
   ];
 
   return (
-    <section className="space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold text-foreground">{t("title")}</h1>
-        <p className="text-sm text-muted">{t("subtitle")}</p>
-      </div>
+    <section className="animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-reduce:animate-none space-y-8">
+      {header}
 
-      <dl className="divide-y divide-border rounded-xl border border-border bg-surface shadow-sm">
-        {rows.map(([label, value]) => (
-          <div
-            key={label}
-            className="grid grid-cols-1 gap-1 px-4 py-3 sm:grid-cols-3 sm:gap-4"
-          >
-            <dt className="text-sm font-medium text-muted">{label}</dt>
-            <dd className="text-sm text-foreground tabular-nums sm:col-span-2">
-              {value}
-            </dd>
-          </div>
-        ))}
-      </dl>
-      <p className="text-xs text-muted">{t("patientIdHint")}</p>
-
-      <div className="flex flex-wrap gap-4">
-        <NavLink href="/consent" variant="soft" icon="forward">
-          {t("links.consent")}
-        </NavLink>
-        <NavLink href="/audit" variant="soft" icon="forward">
-          {t("links.audit")}
-        </NavLink>
-        <NavLink href="/analytics" variant="soft" icon="forward">
-          {t("links.analytics")}
-        </NavLink>
-      </div>
+      <Card>
+        <CardContent className="p-0">
+          <dl className="divide-y divide-border">
+            {rows.map(([label, value]) => (
+              <div
+                key={label}
+                className="grid grid-cols-1 gap-1 px-4 py-3 sm:grid-cols-3 sm:gap-4"
+              >
+                <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
+                <dd className="text-sm text-foreground tabular-nums sm:col-span-2">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </CardContent>
+      </Card>
+      <p className="text-xs text-pretty text-muted-foreground">{t("patientIdHint")}</p>
     </section>
   );
 }

@@ -1,116 +1,196 @@
 @import "tailwindcss";
-@import "../styles/tokens.css";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
 
 /*
- * Design tokens live in ../styles/tokens.css (primitives + semantic aliases,
- * wired into Tailwind v4 `@theme`). Fonts are loaded in ./fonts.ts.
- * Components use semantic utilities only — `text-critical`, `bg-surface` — never
- * a hex literal (ESLint enforces this under src/components/).
+ * shadcn/ui theme (radix-nova, stone neutrals, emerald primary).
+ * Components use semantic utilities only (`bg-primary`, `text-muted-foreground`,
+ * `text-critical`); raw colour values live only in this file. ESLint bans hex
+ * literals under src/components/.
+ *
+ * Domain tokens (critical, consent-*, audit-*, break-glass, superseded) sit
+ * alongside the shadcn set. Each state also carries an icon or label in the
+ * component: colour never carries meaning alone.
  */
 
 :root {
-  /* Light is the default regardless of OS preference (P5 redesign) — dark
-     lives behind [data-theme="dark"] in tokens.css, not prefers-color-scheme. */
-  color-scheme: light;
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.147 0.004 49.25);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.147 0.004 49.25);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.147 0.004 49.25);
+  /* emerald-700: white text passes AA (5.5:1) */
+  --primary: oklch(0.508 0.118 165.612);
+  --primary-foreground: oklch(0.985 0.001 106.423);
+  --secondary: oklch(0.97 0.001 106.424);
+  --secondary-foreground: oklch(0.216 0.006 56.043);
+  --muted: oklch(0.97 0.001 106.424);
+  --muted-foreground: oklch(0.553 0.013 58.071);
+  --accent: oklch(0.97 0.001 106.424);
+  --accent-foreground: oklch(0.216 0.006 56.043);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.923 0.003 48.717);
+  --input: oklch(0.923 0.003 48.717);
+  --ring: oklch(0.696 0.17 162.48);
+  --chart-1: oklch(0.596 0.145 163.225);
+  --chart-2: oklch(0.588 0.158 241.966);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.558 0.288 302.321);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.985 0.001 106.423);
+  --sidebar-foreground: oklch(0.147 0.004 49.25);
+  --sidebar-primary: oklch(0.508 0.118 165.612);
+  --sidebar-primary-foreground: oklch(0.985 0.001 106.423);
+  --sidebar-accent: oklch(0.97 0.001 106.424);
+  --sidebar-accent-foreground: oklch(0.216 0.006 56.043);
+  --sidebar-border: oklch(0.923 0.003 48.717);
+  --sidebar-ring: oklch(0.696 0.17 162.48);
+
+  /* Domain states */
+  --critical: oklch(0.505 0.213 27.518);
+  --critical-surface: oklch(0.971 0.013 17.38);
+  --critical-border: oklch(0.808 0.114 19.571);
+  --success: oklch(0.527 0.154 150.069);
+  --consent-active: oklch(0.393 0.095 152.535);
+  --consent-active-surface: oklch(0.982 0.018 155.826);
+  --consent-revoked: oklch(0.505 0.213 27.518);
+  --consent-expired: oklch(0.414 0.112 45.904);
+  --consent-expired-surface: oklch(0.987 0.022 95.277);
+  --audit-normal: oklch(0.553 0.013 58.071);
+  --audit-normal-surface: oklch(0.97 0.001 106.424);
+  --audit-denied: oklch(0.408 0.123 38.172);
+  --audit-denied-surface: oklch(0.98 0.016 73.684);
+  --break-glass: oklch(0.525 0.223 3.958);
+  --break-glass-surface: oklch(0.971 0.014 343.198);
+  --superseded: oklch(0.553 0.013 58.071);
 }
 
-:root[data-theme="dark"] {
-  color-scheme: dark;
+.dark {
+  --background: oklch(0.147 0.004 49.25);
+  --foreground: oklch(0.985 0.001 106.423);
+  --card: oklch(0.216 0.006 56.043);
+  --card-foreground: oklch(0.985 0.001 106.423);
+  --popover: oklch(0.216 0.006 56.043);
+  --popover-foreground: oklch(0.985 0.001 106.423);
+  --primary: oklch(0.696 0.17 162.48);
+  --primary-foreground: oklch(0.262 0.051 172.552);
+  --secondary: oklch(0.268 0.007 34.298);
+  --secondary-foreground: oklch(0.985 0.001 106.423);
+  --muted: oklch(0.268 0.007 34.298);
+  --muted-foreground: oklch(0.709 0.01 56.259);
+  --accent: oklch(0.268 0.007 34.298);
+  --accent-foreground: oklch(0.985 0.001 106.423);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.596 0.145 163.225);
+  --sidebar: oklch(0.216 0.006 56.043);
+  --sidebar-foreground: oklch(0.985 0.001 106.423);
+  --sidebar-primary: oklch(0.696 0.17 162.48);
+  --sidebar-primary-foreground: oklch(0.262 0.051 172.552);
+  --sidebar-accent: oklch(0.268 0.007 34.298);
+  --sidebar-accent-foreground: oklch(0.985 0.001 106.423);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.596 0.145 163.225);
+
+  --critical: oklch(0.808 0.114 19.571);
+  --critical-surface: oklch(0.258 0.092 26.042);
+  --critical-border: oklch(0.444 0.177 26.899);
+  --success: oklch(0.792 0.209 151.711);
+  --consent-active: oklch(0.925 0.084 155.995);
+  --consent-active-surface: oklch(0.266 0.065 152.934);
+  --consent-revoked: oklch(0.808 0.114 19.571);
+  --consent-expired: oklch(0.924 0.12 95.746);
+  --consent-expired-surface: oklch(0.286 0.066 53.813);
+  --audit-normal: oklch(0.709 0.01 56.259);
+  --audit-normal-surface: oklch(0.268 0.007 34.298);
+  --audit-denied: oklch(0.901 0.076 70.697);
+  --audit-denied-surface: oklch(0.266 0.079 36.259);
+  --break-glass: oklch(0.823 0.12 346.018);
+  --break-glass-surface: oklch(0.284 0.109 3.907);
+  --superseded: oklch(0.709 0.01 56.259);
 }
 
-body {
-  background-color: var(--color-background);
-  color: var(--color-foreground);
-  font-family: var(--font-sans);
-  /* Latin face has tnum; keep interface figures aligned in dense tables. */
-  font-feature-settings: "tnum" 1;
-  -webkit-font-smoothing: antialiased;
-  position: relative;
+@theme inline {
+  /* Noto faces loaded in ./fonts.ts; Latin first so figures get tnum. */
+  --font-sans:
+    "Noto Sans", "Noto Sans Devanagari", "Noto Sans Tamil",
+    "Noto Sans Malayalam", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-sans);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-critical: var(--critical);
+  --color-critical-surface: var(--critical-surface);
+  --color-critical-border: var(--critical-border);
+  --color-success: var(--success);
+  --color-consent-active: var(--consent-active);
+  --color-consent-active-surface: var(--consent-active-surface);
+  --color-consent-revoked: var(--consent-revoked);
+  --color-consent-expired: var(--consent-expired);
+  --color-consent-expired-surface: var(--consent-expired-surface);
+  --color-audit-normal: var(--audit-normal);
+  --color-audit-normal-surface: var(--audit-normal-surface);
+  --color-audit-denied: var(--audit-denied);
+  --color-audit-denied-surface: var(--audit-denied-surface);
+  --color-break-glass: var(--break-glass);
+  --color-break-glass-surface: var(--break-glass-surface);
+  --color-superseded: var(--superseded);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* Grainy paper texture (P5 redesign) — a fixed, viewport-covering noise
-   layer behind all content. SVG feTurbulence, not a shipped PNG, so it costs
-   no network request and scales losslessly. Opacity is intentionally low
-   (mix-blend: overlay reads it as texture, not pattern) and it never
-   intercepts pointer events. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  opacity: 0.5;
-  mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-:root[data-theme="dark"] body::before {
-  opacity: 0.08;
-  mix-blend-mode: soft-light;
-}
-
-#__next,
-body > div:first-child {
-  position: relative;
-  z-index: 1;
-}
-
-/*
- * P5 redesign helpers — the two places a raw gradient/shadow composition
- * would otherwise leak into components. Tokens only: --gradient-accent comes
- * from tokens.css, text on top is always a solid semantic colour.
- */
-
-/* Soft ambient tint behind the home hero band and quick-login panel.
-   Decorative — content on it uses normal tokens; AA is computed against
-   --color-accent-soft, not the vivid accent. */
-.bg-brand-wash {
-  background-image: radial-gradient(
-    48rem 20rem at 50% -20%,
-    var(--color-accent-soft) 0%,
-    transparent 70%
-  );
-}
-
-:root[data-theme="dark"] .bg-brand-wash {
-  background-image: radial-gradient(
-    48rem 20rem at 50% -20%,
-    rgb(6 95 70 / 0.2) 0%,
-    transparent 70%
-  );
-}
-
-/* Primary button/CTA sheen: the AA-safe accent gradient (emerald-9 → emerald-10).
-   Hover darkens via the overlay Button owns, so this stays presentational. */
-.bg-gradient-accent {
-  background-image: var(--gradient-accent);
-}
-
-/* Soft emerald wash behind cards that sit on plain background (hero feature
-   cards, quick-login panel). Decorative only — content on it uses normal tokens. */
-.bg-accent-tint {
-  background-color: var(--color-accent-soft);
-}
-
-/* One elevation language: Card owns shadow-card via this shared class. */
-.elevated-card {
-  box-shadow: var(--shadow-card);
-}
-
-.elevated-card-hover {
-  box-shadow: var(--shadow-card-hover);
-}
-
-/* Full-viewport ambient gradient behind the auth screens. Decorative only —
-   the auth forms themselves stay on Card surfaces with solid token text. */
-.auth-wash {
-  background-image:
-    radial-gradient(60rem 30rem at 85% -10%, var(--color-accent-soft) 0%, transparent 60%),
-    radial-gradient(50rem 28rem at -10% 110%, var(--color-accent-soft) 0%, transparent 55%);
-}
-
-:root[data-theme="dark"] .auth-wash {
-  background-image:
-    radial-gradient(60rem 30rem at 85% -10%, rgb(6 95 70 / 0.22) 0%, transparent 60%),
-    radial-gradient(50rem 28rem at -10% 110%, rgb(6 95 70 / 0.16) 0%, transparent 55%);
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    /* Latin face has tnum; keep interface figures aligned in dense tables. */
+    font-feature-settings: "tnum" 1;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  html {
+    @apply font-sans;
+  }
 }

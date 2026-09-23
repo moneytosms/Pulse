@@ -2,11 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button } from "@/components/ui/Button";
-import { Callout } from "@/components/ui/Callout";
-import { CheckCircleIcon, InfoIcon } from "@/components/ui/icons";
-import { NavLink } from "@/components/ui/NavLink";
-import { useRouter } from "@/i18n/navigation";
+import { BellIcon, CircleCheckIcon, InfoIcon } from "lucide-react";
+import { toast } from "sonner";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
+import { Link, useRouter } from "@/i18n/navigation";
 import { api, ApiError } from "@/lib/api";
 import { useApiErrorMessage } from "@/lib/errors";
 import { formatDate } from "@/lib/format";
@@ -30,15 +40,15 @@ type LoadState =
 // meaning alone (.claude/rules/frontend.md).
 function ReadBadge({ readAt }: { readAt: string | null }) {
   const t = useTranslations("notifications");
-  const Icon = readAt ? CheckCircleIcon : InfoIcon;
-  const className = readAt
-    ? "inline-flex items-center gap-1 rounded-full border border-border-strong bg-surface-raised px-2 py-0.5 text-xs font-medium text-muted"
-    : "inline-flex items-center gap-1 rounded-full border border-accent bg-accent-subtle px-2 py-0.5 text-xs font-medium text-accent-text";
+  const Icon = readAt ? CircleCheckIcon : InfoIcon;
   return (
-    <span className={className}>
-      <Icon className="size-3.5" />
+    <Badge
+      variant="outline"
+      className={readAt ? "text-muted-foreground" : "border-primary text-primary"}
+    >
+      <Icon className="size-3" />
       {readAt ? t("list.read") : t("list.unread")}
-    </span>
+    </Badge>
   );
 }
 
@@ -68,6 +78,7 @@ function NotificationRow({
     try {
       const updated = await api.post<Notification>(`/notifications/${notification.id}/read`);
       onRead(notification.id, updated);
+      toast.success(t("list.read"));
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -76,29 +87,63 @@ function NotificationRow({
   }
 
   return (
-    <li className="space-y-1 rounded-xl border border-border bg-surface shadow-sm px-4 py-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs font-medium text-muted">
-          {typeLabel(notification.type, t)}
-        </span>
-        <ReadBadge readAt={notification.readAt} />
+    <li className="flex gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm">
+      <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+        <BellIcon className="size-4" />
       </div>
-      <p className="text-sm font-medium text-foreground">{notification.title}</p>
-      <p className="text-sm text-muted">{notification.body}</p>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-muted">{formatDate(notification.createdAt)}</p>
-        {!notification.readAt && (
-          <Button variant="ghost" loading={marking} onClick={markRead} className="min-h-0 px-2 py-1">
-            {marking ? t("list.marking") : t("list.markRead")}
-          </Button>
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs font-medium text-muted-foreground">
+            {typeLabel(notification.type, t)}
+          </span>
+          <ReadBadge readAt={notification.readAt} />
+        </div>
+        <p className="text-sm font-medium text-pretty text-foreground">{notification.title}</p>
+        <p className="text-sm text-pretty text-muted-foreground">{notification.body}</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs tabular-nums text-muted-foreground">
+            {formatDate(notification.createdAt)}
+          </p>
+          {!notification.readAt && (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={marking}
+              aria-busy={marking}
+              onClick={markRead}
+            >
+              {marking && <Spinner />}
+              {marking ? t("list.marking") : t("list.markRead")}
+            </Button>
+          )}
+        </div>
+        {error && (
+          <Alert variant="destructive">
+            <InfoIcon />
+            <AlertTitle>{t("error.title")}</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
       </div>
-      {error && (
-        <Callout tone="error" iconLabel={t("error.title")}>
-          {error}
-        </Callout>
-      )}
     </li>
+  );
+}
+
+function NotificationListSkeleton() {
+  return (
+    <ul className="space-y-3" aria-hidden="true">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <li key={i} className="flex gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm">
+          <Skeleton className="size-9 shrink-0 rounded-md" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-4 w-2/3" />
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 w-20" />
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -179,35 +224,49 @@ export default function NotificationsPage() {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-reduce:animate-none space-y-8">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold text-foreground">{t("title")}</h1>
-          <p className="text-sm text-muted">{t("subtitle")}</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
+            {t("title")}
+          </h1>
+          <p className="text-sm text-pretty text-muted-foreground">{t("subtitle")}</p>
         </div>
-        <NavLink href="/notifications/preferences" className="shrink-0" icon="forward">
-          {t("preferencesCta")}
-        </NavLink>
+        <Button asChild variant="outline" size="sm" className="shrink-0">
+          <Link href="/notifications/preferences">{t("preferencesCta")}</Link>
+        </Button>
       </div>
 
-      {state.status === "loading" && <p className="text-sm text-muted">{t("loading")}</p>}
+      {state.status === "loading" && (
+        <>
+          <span className="sr-only">{t("loading")}</span>
+          <NotificationListSkeleton />
+        </>
+      )}
 
       {state.status === "error" && (
         <div className="space-y-3">
-          <Callout tone="error" iconLabel={t("error.title")}>
-            {state.message}
-          </Callout>
-          <Button variant="secondary" onClick={() => setRetryToken((n) => n + 1)}>
+          <Alert variant="destructive">
+            <InfoIcon />
+            <AlertTitle>{t("error.title")}</AlertTitle>
+            <AlertDescription>{state.message}</AlertDescription>
+          </Alert>
+          <Button variant="outline" onClick={() => setRetryToken((n) => n + 1)}>
             {t("error.retry")}
           </Button>
         </div>
       )}
 
       {state.status === "ready" && state.items.length === 0 && (
-        <Callout tone="info" iconLabel={t("empty.title")}>
-          <span className="block font-medium text-foreground">{t("empty.title")}</span>
-          <span>{t("empty.body")}</span>
-        </Callout>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <BellIcon />
+            </EmptyMedia>
+            <EmptyTitle>{t("empty.title")}</EmptyTitle>
+            <EmptyDescription>{t("empty.body")}</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
 
       {state.status === "ready" && state.items.length > 0 && (
@@ -223,18 +282,22 @@ export default function NotificationsPage() {
           </ul>
 
           {state.loadMoreError && (
-            <Callout tone="error" iconLabel={t("error.title")}>
-              {state.loadMoreError}
-            </Callout>
+            <Alert variant="destructive">
+              <InfoIcon />
+              <AlertTitle>{t("error.title")}</AlertTitle>
+              <AlertDescription>{state.loadMoreError}</AlertDescription>
+            </Alert>
           )}
 
           {state.nextCursor && (
             <Button
-              variant="secondary"
-              loading={state.loadingMore}
+              variant="outline"
+              disabled={state.loadingMore}
+              aria-busy={state.loadingMore}
               onClick={loadMore}
               className="w-full sm:w-auto"
             >
+              {state.loadingMore && <Spinner />}
               {state.loadingMore ? t("loadingMore") : t("loadMore")}
             </Button>
           )}

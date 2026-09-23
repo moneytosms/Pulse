@@ -34,5 +34,11 @@
     "aboveRange": "संदर्भ सीमा से अधिक",
     "belowRange": "संदर्भ सीमा से कम",
     "picker": "लैब परीक्षण"
+  },
+  "stats": {
+    "totalVisits": "कुल विज़िट",
+    "activeMedications": "सक्रिय दवाएँ",
+    "labTestsTracked": "ट्रैक किए गए लैब परीक्षण",
+    "dataQualityFlags": "डेटा गुणवत्ता टिप्पणियाँ"
   }
 }
