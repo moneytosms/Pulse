@@ -57,7 +57,7 @@ function AbnormalMarker({ flag }: { flag: "high" | "low" }) {
   const t = useTranslations("timeline");
   const a = t.raw("detail.abnormal") as Record<string, string>;
   return (
-    <Badge variant="destructive" className="gap-1">
+    <Badge className="gap-1 border-critical-border bg-critical-surface font-semibold text-critical">
       <span aria-hidden="true">{flag === "high" ? "▲" : "▼"}</span>
       <span>{flag === "high" ? a.high : a.low}</span>
       <span>{flag === "high" ? a.aboveRange : a.belowRange}</span>
