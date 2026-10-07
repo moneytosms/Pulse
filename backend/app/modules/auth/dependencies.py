@@ -13,7 +13,7 @@ from fastapi import Depends, Request, params, status
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.identity import IdentityProvider, MailpitIdentityProvider
+from app.adapters.identity import IdentityProvider, SmtpIdentityProvider
 from app.core.actor import Actor
 from app.core.authz import Permission, Role, role_has_permission
 from app.core.errors import ErrorCode
@@ -48,7 +48,7 @@ def _redis() -> Redis:
 
 def get_identity_provider() -> IdentityProvider:
     """Overridden with FakeIdentityProvider in tests."""
-    return MailpitIdentityProvider(get_redis())
+    return SmtpIdentityProvider(get_redis())
 
 
 async def current_user(

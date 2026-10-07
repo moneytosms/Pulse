@@ -2,13 +2,12 @@
 
 `start_verification` then `complete_verification` — two calls because
 verification is two round trips and ABHA's flow needs somewhere to go
-(backend.md). Phase 1 ships a Mailpit-backed email implementation and an
-in-memory fake for tests.
+(backend.md). SMTP defaults to Mailpit locally and supports authenticated
+delivery for hosted deployments; tests use an in-memory fake.
 """
 
 import asyncio
 import os
-import smtplib
 from abc import ABC, abstractmethod
 from email.message import EmailMessage
 from enum import StrEnum
@@ -16,6 +15,7 @@ from uuid import UUID
 
 from redis.asyncio import Redis
 
+from app.adapters.smtp import SMTPSettings, send_message, sender_address
 from app.core.security import new_token, token_hash
 
 CHALLENGE_TTL_SECONDS = 24 * 3600
@@ -77,15 +77,14 @@ class FakeIdentityProvider(IdentityProvider):
         return self.issued[challenge_id][0]
 
 
-class MailpitIdentityProvider(IdentityProvider):
+class SmtpIdentityProvider(IdentityProvider):
     """Challenges in Redis (TTL'd); token delivered as an email link via SMTP."""
 
     def __init__(self, redis: Redis) -> None:
         self._redis = redis
-        self._smtp_host = os.environ.get("SMTP_HOST", "mailpit")
-        self._smtp_port = int(os.environ.get("SMTP_PORT", "1025"))
-        self._base_url = os.environ.get("PUBLIC_BASE_URL", "http://localhost")
-        self._from = os.environ.get("MAIL_FROM", "no-reply@pulse.local")
+        self._smtp = SMTPSettings.from_env()
+        self._base_url = os.environ.get("PUBLIC_BASE_URL", "http://localhost").rstrip("/")
+        self._from = sender_address(username=self._smtp.username)
 
     async def start_verification(self, user_id: UUID, email: str, locale: str) -> str:
         challenge_id = new_token()
@@ -123,5 +122,4 @@ class MailpitIdentityProvider(IdentityProvider):
         await asyncio.to_thread(self._smtp_send, msg)
 
     def _smtp_send(self, msg: EmailMessage) -> None:
-        with smtplib.SMTP(self._smtp_host, self._smtp_port, timeout=10) as smtp:
-            smtp.send_message(msg)
+        send_message(msg, self._smtp)

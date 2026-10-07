@@ -29,13 +29,22 @@
       "text": "Note text",
       "file": "Attach a document"
     },
-    "fileHint": "PDF, PNG or JPEG.",
+    "fileHint": "PDF, PNG or JPEG. Maximum size: 25 MB.",
+    "dropzone": {
+      "prompt": "Drag and drop a document here",
+      "browse": "Browse files",
+      "replace": "Replace file",
+      "remove": "Remove file",
+      "oneAtATime": "Choose one file at a time.",
+      "unsupported": "Choose a PDF, PNG or JPEG file."
+    },
     "validation": {
       "requiredFields": "Fill in the patient, entry type and when it occurred."
     },
     "upload": {
       "inProgress": "Uploading document… {percent}%",
-      "failed": "The entry was filed, but the document could not be uploaded: {reason}"
+      "failed": "The entry was filed, but the document could not be uploaded: {reason}",
+      "progressLabel": "Document upload progress"
     }
   }
 }

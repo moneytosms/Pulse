@@ -1,6 +1,6 @@
 # Gmail SMTP and document dropzone
 
-**Status:** approved design scope; awaiting spec review before implementation.
+**Status:** implemented; live Gmail delivery awaits local App Password setup.
 
 ## Context
 

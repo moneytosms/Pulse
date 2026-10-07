@@ -6,11 +6,11 @@ carry no clinical data (clinical-safety.md).
 """
 
 import asyncio
-import os
-import smtplib
 from abc import ABC, abstractmethod
 from email.message import EmailMessage
 from typing import Any
+
+from app.adapters.smtp import SMTPSettings, send_message, sender_address
 
 
 class NotificationProvider(ABC):
@@ -30,15 +30,14 @@ class FakeNotificationProvider(NotificationProvider):
         self.sent.append((channel, address, type_, params))
 
 
-class MailpitNotificationProvider(NotificationProvider):
-    """EMAIL over Mailpit SMTP, same shape as `MailpitIdentityProvider`. No
+class SmtpNotificationProvider(NotificationProvider):
+    """EMAIL over configured SMTP, same shape as `SmtpIdentityProvider`. No
     SMS provider exists anywhere in this stack yet, so other channels are a
     no-op rather than a failure."""
 
     def __init__(self) -> None:
-        self._smtp_host = os.environ.get("SMTP_HOST", "mailpit")
-        self._smtp_port = int(os.environ.get("SMTP_PORT", "1025"))
-        self._from = os.environ.get("MAIL_FROM", "no-reply@pulse.local")
+        self._smtp = SMTPSettings.from_env()
+        self._from = sender_address(username=self._smtp.username)
 
     async def send(self, channel: str, address: str, type_: str, params: dict[str, Any]) -> None:
         if channel != "EMAIL":
@@ -51,5 +50,4 @@ class MailpitNotificationProvider(NotificationProvider):
         await asyncio.to_thread(self._smtp_send, msg)
 
     def _smtp_send(self, msg: EmailMessage) -> None:
-        with smtplib.SMTP(self._smtp_host, self._smtp_port, timeout=10) as smtp:
-            smtp.send_message(msg)
+        send_message(msg, self._smtp)

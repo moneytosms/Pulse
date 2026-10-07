@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
+import { DocumentDropzone } from "@/components/DocumentDropzone";
 import {
   Select,
   SelectContent,
@@ -359,26 +359,14 @@ export default function NewEntryPage({
           />
         )}
 
-        <div className="space-y-1.5">
-          <Label htmlFor={`${formId}-file`}>{f.file}</Label>
-          <p className="text-xs text-muted-foreground">{t("new.fileHint")}</p>
-          <input
-            id={`${formId}-file`}
-            type="file"
-            accept="application/pdf,image/png,image/jpeg"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="block w-full text-sm text-foreground"
-          />
-        </div>
-
-        {uploadFraction != null && (
-          <div className="space-y-1">
-            <p className="text-xs tabular-nums text-muted-foreground">
-              {t("new.upload.inProgress", { percent: Math.round(uploadFraction * 100) })}
-            </p>
-            <Progress value={Math.round(uploadFraction * 100)} />
-          </div>
-        )}
+        <DocumentDropzone
+          label={f.file}
+          hint={t("new.fileHint")}
+          file={file}
+          onFileChange={setFile}
+          disabled={submitting}
+          uploadFraction={uploadFraction}
+        />
 
         <Button type="submit" disabled={submitting} aria-busy={submitting} className="w-full">
           {submitting && <Spinner />}

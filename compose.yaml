@@ -34,9 +34,16 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://pulse_app:pulse_app@postgres:5432/pulse
       REDIS_URL: redis://redis:6379/0
-      # Mailpit speaks SMTP on 1025; NotificationProvider wires this up in Phase 3.
-      SMTP_HOST: mailpit
-      SMTP_PORT: "1025"
+      # Defaults keep a fresh clone working with Mailpit. A local .env or host
+      # environment can select Gmail SMTP without changing this file.
+      SMTP_HOST: "${SMTP_HOST:-mailpit}"
+      SMTP_PORT: "${SMTP_PORT:-1025}"
+      SMTP_USERNAME: "${SMTP_USERNAME:-}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD:-}"
+      SMTP_STARTTLS: "${SMTP_STARTTLS:-false}"
+      SMTP_SSL: "${SMTP_SSL:-false}"
+      MAIL_FROM: "${MAIL_FROM:-}"
+      PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-http://localhost}"
     depends_on:
       postgres:
         condition: service_healthy

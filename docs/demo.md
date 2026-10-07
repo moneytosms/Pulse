@@ -7,7 +7,7 @@ consent takes effect immediately.
 
 Exact seeded IDs, the backend checks and the teardown steps are in
 [`RUNNING.md`](../RUNNING.md). This file covers what to click and what to
-say while doing it.
+say while doing it.  
 
 ## Status: read before rehearsing
 
@@ -47,40 +47,46 @@ Not demonstrable in the UI: corrections. The backend supersedes entries
 and the entry detail screen shows "This entry corrects an earlier one.",
 but no screen files a correction. Mention it at step 3 instead of showing it.
 
-## How email verification works (Mailpit)
+## Email verification: local Mailpit or Gmail SMTP
 
-Mailpit is a fake mail server running as a local container. It accepts
-every message sent to it on SMTP port 1025 and delivers none of them. It
-shows them in a web inbox at `http://localhost:8025` instead.
+The default Compose setup uses Mailpit, a local fake mail server. It accepts
+messages on SMTP port 1025 and displays them at `http://localhost:8025`; it
+does not deliver to real inboxes. This keeps a fresh clone runnable without
+credentials.
 
-**Why it needs no credentials:** it never talks to a real mail provider
-(Gmail, SES, and so on), so there is nothing to log in to. The backend
-connects to `mailpit:1025` inside the Compose network with no
-authentication (`backend/app/adapters/identity.py`,
-`backend/app/adapters/notifications.py`), and Mailpit catches every
-message whatever the recipient address. `test.patient@example.com` works
-because the mail never leaves the machine.
+**To send through the configured personal Gmail account**, copy `.env.example`
+to `.env` and replace `SMTP_PASSWORD` with a Google App Password. Keep
+`SMTP_HOST=smtp.gmail.com`,
+`SMTP_PORT=587`, and `SMTP_STARTTLS=true`. The App Password is used instead of
+the normal Google password; Google requires 2-Step Verification for App
+Passwords. Keep `.env` out of Git. The same variables can be set as deployment
+secrets for a hosted app.
 
-**Configuration:** none needed. `compose.yaml` already sets it up:
+Google links: [Gmail SMTP settings](https://support.google.com/a/answer/176600)
+and [App Password requirements](https://support.google.com/accounts/answer/185833).
+
+**Configuration:** with no `.env`, Compose uses the Mailpit defaults. When
+`.env` is present, Compose passes its SMTP settings into the backend:
 
 | Setting | Where | Value |
 |---|---|---|
-| `SMTP_HOST` / `SMTP_PORT` | `backend` env | `mailpit` / `1025` |
-| `PUBLIC_BASE_URL` | backend env, defaults in code | `http://localhost`; the verify link is built from it |
-| `MAIL_FROM` | backend env, defaults in code | `no-reply@pulse.local` |
-| Inbox UI | `mailpit` publishes `8025` | `http://localhost:8025` |
+| `SMTP_HOST` / `SMTP_PORT` | backend env | `mailpit` / `1025` by default; Gmail uses `smtp.gmail.com` / `587` |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | local `.env` or deployment secrets | Gmail address / App Password; blank for Mailpit |
+| `SMTP_STARTTLS` / `SMTP_SSL` | backend env | `false` / `false` by default; Gmail uses `true` / `false` |
+| `PUBLIC_BASE_URL` | backend env | Defaults to `http://localhost`; use a public HTTPS URL for recipients outside this machine |
+| `MAIL_FROM` | backend env | Defaults to the SMTP username, or `no-reply@pulse.local` for Mailpit |
+| Mailpit inbox | `mailpit` publishes `8025` | `http://localhost:8025` when using the default configuration |
 
 **Flow:** register, and the backend stores a challenge in Redis (it
 expires) and emails the link
 `{PUBLIC_BASE_URL}/{locale}/verify?challenge=…&token=…`. Open it from
 Mailpit and the account is verified.
 
-**If the app runs anywhere other than `localhost`,** set
-`PUBLIC_BASE_URL` to the address the audience's browser uses, or the
-link in the email points at the wrong host. Switching to real email is
-a change of environment variables only (`SMTP_HOST`, `SMTP_PORT`,
-`MAIL_FROM`); the code does not change. Real SMTP providers need
-authentication, though, and the current adapter does not send any.
+For a Gmail message opened on the same development machine,
+`PUBLIC_BASE_URL=http://localhost` is fine. If the recipient is someone else,
+the link must use an HTTPS hostname or tunnel they can reach; `localhost` in
+their browser points to their own machine. Automated tests use fake email
+providers and never send messages through Gmail.
 
 ## Setup (before the audience is in the room)
 

@@ -31,7 +31,7 @@ docker compose up
 On first boot the backend runs migrations and seeds identity data. Then:
 
 - App: `http://localhost` — try `/en/register`, or `/en/login`
-- Mailpit inbox (verification emails): `http://localhost:8025`
+- Mailpit inbox (default local verification emails): `http://localhost:8025`; Gmail SMTP setup is in [`docs/demo.md`](docs/demo.md)
 - Seeded patient login: `demo.patient.hi@example.com` / `Pulse@demo1` (also `demo.patient.en@example.com`; see [`seed/README.md`](seed/README.md))
 
 Demo journey: register → open the verification link in Mailpit → log in → the seeded profile → switch `/en` ↔ `/hi`.

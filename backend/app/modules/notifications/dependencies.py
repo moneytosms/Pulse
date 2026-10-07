@@ -4,8 +4,8 @@ this to get a `NotificationProvider` without importing `app.adapters`
 directly; cross-module import lint allows `app.modules.notifications.dependencies`.
 """
 
-from app.adapters.notifications import MailpitNotificationProvider, NotificationProvider
+from app.adapters.notifications import NotificationProvider, SmtpNotificationProvider
 
 
 def get_notification_provider() -> NotificationProvider:
-    return MailpitNotificationProvider()
+    return SmtpNotificationProvider()

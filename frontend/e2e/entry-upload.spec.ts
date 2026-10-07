@@ -80,6 +80,48 @@ test("a stubbed 413 on document upload shows the size-specific message", async (
   ).toBeVisible();
 });
 
+test("a dropped document is selected and can be removed", async ({ page }) => {
+  await page.goto("/en/timeline/new");
+  await page.waitForLoadState("networkidle");
+
+  await page.locator('[data-testid="document-dropzone"]').evaluate((dropzone) => {
+    const files = new DataTransfer();
+    files.items.add(new File(["%PDF-1.4"], "blood-report.pdf", { type: "application/pdf" }));
+    dropzone.dispatchEvent(
+      new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: files }),
+    );
+  });
+
+  await expect(page.getByText("blood-report.pdf")).toBeVisible();
+  await expect(page.getByText("8 B")).toBeVisible();
+  await page.getByRole("button", { name: "Remove file" }).click();
+  await expect(page.getByText("Drag and drop a document here")).toBeVisible();
+});
+
+test("the dropzone rejects unsupported documents and opens the file picker", async ({ page }) => {
+  await page.goto("/en/timeline/new");
+  await page.waitForLoadState("networkidle");
+
+  await page.locator('[data-testid="document-dropzone"]').evaluate((dropzone) => {
+    const files = new DataTransfer();
+    files.items.add(new File(["notes"], "notes.txt", { type: "text/plain" }));
+    dropzone.dispatchEvent(
+      new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: files }),
+    );
+  });
+
+  await expect(page.getByText("Choose a PDF, PNG or JPEG file.", { exact: true })).toBeVisible();
+  const fileChooserPromise = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Browse files" }).click();
+  const fileChooser = await fileChooserPromise;
+  await fileChooser.setFiles({
+    name: "scan.png",
+    mimeType: "image/png",
+    buffer: Buffer.from("png"),
+  });
+  await expect(page.getByText("scan.png")).toBeVisible();
+});
+
 test("Provider Staff files from the patient record with the id prefilled", async ({ page }) => {
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());

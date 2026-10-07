@@ -39,8 +39,8 @@ Three things are external systems in disguise, and each sits behind an interface
 | Adapter | Now | Later |
 |---|---|---|
 | `StorageProvider` | local filesystem on a mounted volume | S3, MinIO, Garage |
-| `NotificationProvider` | in-app, plus SMTP to Mailpit | real SMTP, SMS, push |
-| `IdentityProvider` | email verification and step-up | ABHA / government health ID |
+| `NotificationProvider` | in-app, plus SMTP to Mailpit or authenticated SMTP | SMS, push |
+| `IdentityProvider` | email verification over Mailpit or authenticated SMTP, and step-up | ABHA / government health ID |
 
 `IdentityProvider` is deliberately a two-call interface — `start_verification` then `complete_verification` — rather than the single `verify()` originally sketched. Verification is two round trips, and a one-method interface would have left ABHA's flow nowhere to go.
 
@@ -111,7 +111,7 @@ Fonts must carry Devanagari, Tamil and Malayalam. Most default UI stacks carry n
 
 `docker compose up` brings the whole system up on any machine with Docker: `caddy`, `frontend`, `backend`, `postgres`, `redis`, `mailpit`.
 
-Mail goes to Mailpit, which catches SMTP locally and serves a web inbox on `:8025` — nothing leaves the machine, no credentials in the repo, and the demo can show an email arriving beside the app. Real SMTP is an environment variable change, not a code change.
+Mailpit is the no-credential local default and serves a web inbox on `:8025`. The same adapters support authenticated SMTP with STARTTLS or SSL; Gmail credentials come from local `.env` or deployment secrets, never source code. Automated tests override both mail providers with fakes.
 
 Email is dispatched via FastAPI `BackgroundTasks` after the response returns. There is no task queue and none is being added: a broker plus a worker container is real infrastructure for a handful of messages. The trade-off is explicit — a failed send is logged and lost, which is acceptable because the in-app notification is written transactionally and is the system of record.
 
