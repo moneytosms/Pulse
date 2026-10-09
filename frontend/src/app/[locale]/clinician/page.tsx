@@ -35,7 +35,7 @@ type GateState =
 type PatientsState =
   | { status: "loading" }
   | { status: "error" }
-  | { status: "ready"; items: ConsentedPatient[] };
+  | { status: "ready"; items: ConsentedPatient[]; nextCursor: string | null; loadingMore: boolean; error: string | null };
 
 export default function ClinicianHomePage() {
   const t = useTranslations("clinicianHome");
@@ -43,6 +43,8 @@ export default function ClinicianHomePage() {
   const [gate, setGate] = useState<GateState>({ status: "loading" });
   const [patients, setPatients] = useState<PatientsState>({ status: "loading" });
   const [patientId, setPatientId] = useState("");
+  const [patientsRetry, setPatientsRetry] = useState(0);
+  const paginationRequest = useRef<AbortController | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fieldId = useId();
   const errorId = useId();
@@ -77,18 +79,37 @@ export default function ClinicianHomePage() {
   useEffect(() => {
     if (gate.status !== "ready" || gate.role !== "CLINICIAN") return;
     let active = true;
+    Promise.resolve().then(() => { if (active) setPatients({ status: "loading" }); });
     api
       .get<Page<ConsentedPatient>>("/consents/granted-to-me")
       .then((page) => {
-        if (active) setPatients({ status: "ready", items: page.items });
+        if (active) setPatients({ status: "ready", items: page.items, nextCursor: page.nextCursor, loadingMore: false, error: null });
       })
       .catch(() => {
         if (active) setPatients({ status: "error" });
       });
     return () => {
+      paginationRequest.current?.abort();
       active = false;
     };
-  }, [gate]);
+  }, [gate, patientsRetry]);
+
+  async function loadMorePatients() {
+    if (patients.status !== "ready" || !patients.nextCursor || patients.loadingMore) return;
+    paginationRequest.current?.abort();
+    const controller = new AbortController();
+    paginationRequest.current = controller;
+    const cursor = patients.nextCursor;
+    setPatients({ ...patients, loadingMore: true, error: null });
+    try {
+      const page = await api.get<Page<ConsentedPatient>>(`/consents/granted-to-me?cursor=${encodeURIComponent(cursor)}`, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      setPatients(prev => prev.status === "ready" ? { status: "ready", items: [...prev.items, ...page.items], nextCursor: page.nextCursor, loadingMore: false, error: null } : prev);
+    } catch {
+      if (controller.signal.aborted) return;
+      setPatients(prev => prev.status === "ready" ? { ...prev, loadingMore: false, error: t("patients.error") } : prev);
+    }
+  }
 
   function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -141,10 +162,10 @@ export default function ClinicianHomePage() {
               <p className="text-sm text-muted-foreground">{t("loading")}</p>
             )}
             {patients.status === "error" && (
-              <Alert variant="destructive">
+              <div className="space-y-3"><Alert variant="destructive">
                 <TriangleAlertIcon />
                 <AlertDescription>{t("patients.error")}</AlertDescription>
-              </Alert>
+              </Alert><Button variant="outline" onClick={() => setPatientsRetry(n => n + 1)}>{t("patients.retry")}</Button></div>
             )}
             {patients.status === "ready" && patients.items.length === 0 && (
               <p className="text-sm text-muted-foreground">{t("patients.empty")}</p>
@@ -169,6 +190,8 @@ export default function ClinicianHomePage() {
                 ))}
               </ul>
             )}
+            {patients.status === "ready" && patients.error && <Alert variant="destructive"><AlertDescription>{patients.error}</AlertDescription></Alert>}
+            {patients.status === "ready" && patients.nextCursor && <Button variant="outline" disabled={patients.loadingMore} aria-busy={patients.loadingMore} onClick={loadMorePatients}>{t("patients.loadMore")}</Button>}
           </CardContent>
         </Card>
       )}

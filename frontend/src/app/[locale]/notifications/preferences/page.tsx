@@ -29,8 +29,7 @@ import { api, ApiError } from "@/lib/api";
 import { useApiErrorMessage } from "@/lib/errors";
 import {
   MANDATORY_NOTIFICATION_TYPES,
-  NOTIFICATION_CHANNELS,
-  type NotificationPreference,
+    type NotificationPreference,
 } from "@/lib/notifications";
 
 type LoadState =
@@ -127,7 +126,7 @@ function PreferencesSkeleton() {
             <Skeleton className="h-4 w-32" />
           </CardHeader>
           <CardContent className="space-y-3">
-            {NOTIFICATION_CHANNELS.map((c) => (
+            {["IN_APP"].map((c) => (
               <div key={c} className="flex items-center justify-between gap-4">
                 <Skeleton className="h-4 w-16" />
                 <Skeleton className="h-5 w-8 rounded-full" />
@@ -197,7 +196,7 @@ export default function NotificationPreferencesPage() {
   // second, defensive layer against the same leak.
   const visible =
     state.status === "ready"
-      ? state.items.filter((pref) => !MANDATORY_NOTIFICATION_TYPES.has(pref.notificationType))
+      ? state.items.filter((pref) => !MANDATORY_NOTIFICATION_TYPES.has(pref.notificationType) && pref.channel === "IN_APP")
       : [];
 
   // Group by type for the card-per-type layout — mobile-first (patient

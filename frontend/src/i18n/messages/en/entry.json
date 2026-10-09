@@ -44,7 +44,26 @@
     "upload": {
       "inProgress": "Uploading document… {percent}%",
       "failed": "The entry was filed, but the document could not be uploaded: {reason}",
-      "progressLabel": "Document upload progress"
+      "progressLabel": "Document upload progress",
+      "keepOpen": "The entry is saved. Keep this page open while the document uploads.",
+      "attached": "Document attached.",
+      "retry": "Retry document upload",
+      "attach": "Attach document",
+      "leaveWarning": "The document is still uploading. Leaving may interrupt it. Leave this page?"
     }
+  },
+  "gate": {
+    "loading": "Checking your access…",
+    "title": "Provider Staff access required",
+    "denied": "Only verified Provider Staff can file or correct entries."
+  },
+  "correction": {
+    "cta": "Correct this entry",
+    "title": "Correct an entry",
+    "subtitle": "File a replacement. The original remains in the revision history. Existing documents stay with the original entry.",
+    "submit": "File correction",
+    "success": "Correction filed",
+    "successBody": "The replacement entry is now the current version.",
+    "alreadyCorrected": "This entry has already been corrected. Open its current version."
   }
 }

@@ -15,7 +15,7 @@ FastAPI + Python. Applies to `backend/`.
 - `populate_by_name` is deprecated in Pydantic 2.11. Use `validate_by_name` / `validate_by_alias`; every tutorial still shows the old one.
 - Error responses are always the coded envelope — `{"error": {"code", "message", "details", "requestId"}}`. FastAPI's default `{"detail": ...}` is replaced globally, including for `RequestValidationError`.
 - Error codes are `SCREAMING_SNAKE_CASE`, live in one Python enum, and are **stable forever, never reworded**. The frontend renders from `code`, never from `message`.
-- Cursor pagination everywhere: `?cursor=&limit=` returning `{items, nextCursor}`. Never offset pagination — the timeline and audit log are append-heavy and offset silently skips rows mid-scroll.
+- Persisted collections use cursor pagination: `?cursor=&limit=` returning `{items, nextCursor}`. Never offset pagination — the timeline and audit log are append-heavy and offset silently skips rows mid-scroll. Computed chart arrays are the bounded exception: optional UTC date windows, at most 5,000 result rows, and explicit overflow errors (ADR-0016).
 
 ## Contracts before implementations
 

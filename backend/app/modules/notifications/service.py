@@ -34,12 +34,14 @@ from app.core.authz import Role
 from app.core.errors import ErrorCode
 from app.core.exceptions import PulseError
 from app.core.pagination import Page
+from app.core.transactions import transactional
 from app.modules.audit import service as audit_service
 from app.modules.notifications import repository
 from app.modules.notifications.models import Notification as NotificationRow
 from app.modules.notifications.schemas import (
     Notification,
     NotificationChannel,
+    NotificationParams,
     NotificationPreference,
     NotificationType,
 )
@@ -88,6 +90,7 @@ def _to_wire(row: NotificationRow) -> Notification:
         type=row.type,
         title=title,
         body=body,
+        params=NotificationParams.model_validate(row.params),
         read_at=row.read_at,
         created_at=row.created_at,
     )
@@ -123,13 +126,13 @@ async def notify(
     `background_tasks` so the caller's request is never slowed by SMTP —
     only happens for mandatory types; the digest and every opt-outable
     type are in-app only."""
+    params = NotificationParams.model_validate(params).model_dump(mode="json", exclude_none=True)
     mandatory = type_ in MANDATORY_TYPES
     if not mandatory and not await _channel_enabled(
         session, user_id, type_, NotificationChannel.IN_APP
     ):
         return None
     row = await repository.insert_notification(session, user_id, type_, params)
-    await session.commit()
     if mandatory and provider is not None and background_tasks is not None:
         user = await users_service.get_user(session, user_id)
         if user is not None:
@@ -149,13 +152,16 @@ async def _maybe_create_daily_digest(session: AsyncSession, actor: Actor) -> Non
     profile = await users_service.get_own_patient_profile(session, actor)
     if profile is None:
         return
-    since = await repository.get_last_digest_created_at(session, actor.user_id) or _EPOCH
-    view_count = await audit_service.count_non_patient_entry_views(session, profile.id, since)
+    await users_service.lock_patient_for_write(session, profile.id)
+    total = await audit_service.count_non_patient_entry_views(session, profile.id, _EPOCH)
+    consumed = await repository.digested_entry_view_count(session, actor.user_id)
+    view_count = max(0, total - consumed)
     if view_count == 0:
         return
     await notify(session, actor.user_id, NotificationType.DAILY_DIGEST, {"viewCount": view_count})
 
 
+@transactional
 async def list_notifications(
     session: AsyncSession, actor: Actor, *, cursor: str | None = None, limit: int = 50
 ) -> Page[Notification]:
@@ -190,7 +196,7 @@ async def list_preferences(session: AsyncSession, actor: Actor) -> list[Notifica
         NotificationPreference(notification_type=t, channel=c, enabled=stored.get((t, c), True))
         for t in NotificationType
         if t not in MANDATORY_TYPES
-        for c in NotificationChannel
+        for c in (NotificationChannel.IN_APP,)
     ]
 
 
@@ -201,6 +207,12 @@ async def set_preference(
         raise PulseError(
             ErrorCode.NOTIFICATION_TYPE_MANDATORY,
             "This notification type cannot be disabled.",
+            http_status=422,
+        )
+    if payload.channel is not NotificationChannel.IN_APP:
+        raise PulseError(
+            ErrorCode.VALIDATION_ERROR,
+            "Only in-app optional delivery is supported.",
             http_status=422,
         )
     await repository.upsert_preference(

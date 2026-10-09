@@ -15,12 +15,14 @@ jobs:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0
       # --group dev pulls pytest, httpx and the testcontainers extras.
-      - run: uv sync --group dev
+      - run: uv sync --frozen --group dev
+      - run: uv run python scripts/generate_api.py --check
       - run: uv run ruff check .
       - run: uv run mypy .
       # Enforcement lints (ADR-0004 / ADR-0006 / clinical-safety.md). Cheap
       # now, unpayable at sixty routes.
       - run: uv run python scripts/lint_cross_module_imports.py
+      - run: uv run python scripts/lint_module_sql.py
       - run: uv run python scripts/lint_entry_query.py
       # Actor-first (errors.md 2026-09-12): personal-data readers take an
       # actor. Lives in CI rather than review, as that entry's rule demands.
@@ -41,6 +43,7 @@ jobs:
         with:
           node-version: 24
       - run: npm ci
+      - run: npm run check:locales
       - run: npm run lint
       # typescript stays pinned at 6.0.3 in package.json — 7.x breaks type-aware ESLint.
       - run: npx tsc --noEmit

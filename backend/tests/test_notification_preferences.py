@@ -15,7 +15,7 @@ from httpx import AsyncClient
 
 _MANDATORY = {"BREAK_GLASS_ACCESS", "CONSENT_REVOKED"}
 _OPTIONAL = {"CONSENT_GRANTED", "RECORD_UPLOADED", "DAILY_DIGEST"}
-_CHANNELS = {"EMAIL", "SMS", "IN_APP"}
+_CHANNELS = {"IN_APP"}
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -54,7 +54,7 @@ async def test_updating_a_preference_persists_and_is_reflected_on_read(
     await register_and_login(email="prefs-update@example.com")
     put = await client.put(
         "/api/v1/notification-preferences",
-        json={"notificationType": "RECORD_UPLOADED", "channel": "EMAIL", "enabled": False},
+        json={"notificationType": "RECORD_UPLOADED", "channel": "IN_APP", "enabled": False},
     )
     assert put.status_code == 200
     assert put.json()["enabled"] is False
@@ -63,14 +63,14 @@ async def test_updating_a_preference_persists_and_is_reflected_on_read(
     row = next(
         r
         for r in get.json()
-        if r["notificationType"] == "RECORD_UPLOADED" and r["channel"] == "EMAIL"
+        if r["notificationType"] == "RECORD_UPLOADED" and r["channel"] == "IN_APP"
     )
     assert row["enabled"] is False
     # Untouched rows keep the default.
     other = next(
         r
         for r in get.json()
-        if r["notificationType"] == "RECORD_UPLOADED" and r["channel"] == "SMS"
+        if r["notificationType"] == "DAILY_DIGEST" and r["channel"] == "IN_APP"
     )
     assert other["enabled"] is True
 
@@ -85,3 +85,20 @@ async def test_a_mandatory_type_cannot_be_set(
     )
     assert resp.status_code == 422
     assert resp.json()["error"]["code"] == "NOTIFICATION_TYPE_MANDATORY"
+
+
+async def test_unsupported_optional_channels_are_rejected(
+    client: AsyncClient, register_and_login: RegisterAndLogin
+) -> None:
+    await register_and_login(email="prefs-unsupported@example.com")
+    for channel in ("SMS", "EMAIL"):
+        response = await client.put(
+            "/api/v1/notification-preferences",
+            json={
+                "notificationType": "RECORD_UPLOADED",
+                "channel": channel,
+                "enabled": True,
+            },
+        )
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "VALIDATION_ERROR"

@@ -15,12 +15,14 @@ just never calls anything that would let a non-Administrator through.
 
 from __future__ import annotations
 
-from typing import Any
+from datetime import date, datetime
+from typing import Protocol
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.actor import Actor
+from app.core.pagination import Page
 from app.modules.admin.schemas import (
     AdminPatientIdentity,
     DuplicateReviewCandidate,
@@ -30,15 +32,24 @@ from app.modules.admin.schemas import (
 from app.modules.records import service as records_service
 from app.modules.users import service as users_service
 
-# `users.models.Patient` — typed as `Any` rather than imported: this module
-# talks to `users` only through `users.service` (backend.md), and the
-# cross-module import lint (`scripts/lint_cross_module_imports.py`) bars
-# reaching into another module's `models` even for a type hint.
-_Patient = Any
+
+class _Patient(Protocol):
+    id: UUID
+    full_name: str
+    date_of_birth: date | None
+    phone: str | None
+    user_id: UUID | None
 
 
-async def _identity(session: AsyncSession, actor: Actor, patient: _Patient) -> AdminPatientIdentity:
-    count = await records_service.entry_count_for_patient(session, actor, patient.id)
+class _Merge(Protocol):
+    id: UUID
+    winner_patient_id: UUID
+    loser_patient_id: UUID
+    occurred_at: datetime
+    reversed_at: datetime | None
+
+
+def _identity(patient: _Patient, count: int) -> AdminPatientIdentity:
     return AdminPatientIdentity(
         id=patient.id,
         full_name=patient.full_name,
@@ -50,22 +61,27 @@ async def _identity(session: AsyncSession, actor: Actor, patient: _Patient) -> A
 
 
 async def duplicate_review_queue(
-    session: AsyncSession, actor: Actor
-) -> list[DuplicateReviewCandidate]:
+    session: AsyncSession, actor: Actor, *, cursor: str | None = None, limit: int = 50
+) -> Page[DuplicateReviewCandidate]:
     """Identity fields + entry counts only, never entry content (ADR-0007,
     ADR-0011). `list_duplicate_review_queue` gates to Administrator."""
-    items = await users_service.list_duplicate_review_queue(session, actor)
+    items, next_cursor = await users_service.duplicate_review_page(
+        session, actor, cursor=cursor, limit=limit
+    )
     candidates: list[DuplicateReviewCandidate] = []
+    patient_ids = list({pid for item in items for pid in (item.patient_id_a, item.patient_id_b)})
+    patients = await users_service.patient_map(session, patient_ids)
+    counts = await records_service.entry_counts_for_patients(session, actor, patient_ids)
     for item in items:
-        patient_a = await users_service.get_patient(session, item.patient_id_a)
-        patient_b = await users_service.get_patient(session, item.patient_id_b)
+        patient_a = patients.get(item.patient_id_a)
+        patient_b = patients.get(item.patient_id_b)
         if patient_a is None or patient_b is None:  # pragma: no cover - defensive
             continue
         candidates.append(
             DuplicateReviewCandidate(
                 id=item.id,
-                patient_a=await _identity(session, actor, patient_a),
-                patient_b=await _identity(session, actor, patient_b),
+                patient_a=_identity(patient_a, counts.get(patient_a.id, 0)),
+                patient_b=_identity(patient_b, counts.get(patient_b.id, 0)),
                 score=float(item.score),
                 # `DuplicateReviewItem.status` maps to a plain `String`
                 # column (not `SAEnum`), so the value read back off a real
@@ -73,7 +89,7 @@ async def duplicate_review_queue(
                 status=str(item.status),
             )
         )
-    return candidates
+    return Page[DuplicateReviewCandidate](items=candidates, next_cursor=next_cursor)
 
 
 async def mark_not_duplicate(
@@ -82,13 +98,13 @@ async def mark_not_duplicate(
     await users_service.mark_not_duplicate(session, actor, patient_id_a, patient_id_b)
 
 
-def _to_merge_result(merge: object) -> MergeResult:
+def _to_merge_result(merge: _Merge) -> MergeResult:
     return MergeResult(
-        id=merge.id,  # type: ignore[attr-defined]
-        winner_patient_id=merge.winner_patient_id,  # type: ignore[attr-defined]
-        loser_patient_id=merge.loser_patient_id,  # type: ignore[attr-defined]
-        occurred_at=merge.occurred_at,  # type: ignore[attr-defined]
-        reversed_at=merge.reversed_at,  # type: ignore[attr-defined]
+        id=merge.id,
+        winner_patient_id=merge.winner_patient_id,
+        loser_patient_id=merge.loser_patient_id,
+        occurred_at=merge.occurred_at,
+        reversed_at=merge.reversed_at,
     )
 
 
@@ -101,12 +117,21 @@ async def merge(
     return _to_merge_result(result)
 
 
-async def reversible_merges(session: AsyncSession, actor: Actor) -> list[MergeRecord]:
+async def reversible_merges(
+    session: AsyncSession, actor: Actor, *, cursor: str | None = None, limit: int = 50
+) -> Page[MergeRecord]:
     """`list_reversible_merges` gates to Administrator."""
     records: list[MergeRecord] = []
-    for merge in await users_service.list_reversible_merges(session, actor):
-        winner = await users_service.get_patient(session, merge.winner_patient_id)
-        loser = await users_service.get_patient(session, merge.loser_patient_id)
+    merges, next_cursor = await users_service.reversible_merge_page(
+        session, actor, cursor=cursor, limit=limit
+    )
+    patient_ids = list(
+        {pid for merge in merges for pid in (merge.winner_patient_id, merge.loser_patient_id)}
+    )
+    patients = await users_service.patient_map(session, patient_ids)
+    for merge in merges:
+        winner = patients.get(merge.winner_patient_id)
+        loser = patients.get(merge.loser_patient_id)
         if winner is None or loser is None:  # pragma: no cover - FK-guaranteed
             continue
         records.append(
@@ -116,7 +141,7 @@ async def reversible_merges(session: AsyncSession, actor: Actor) -> list[MergeRe
                 loser_name=loser.full_name,
             )
         )
-    return records
+    return Page[MergeRecord](items=records, next_cursor=next_cursor)
 
 
 async def reverse(session: AsyncSession, actor: Actor, merge_id: UUID) -> MergeResult:

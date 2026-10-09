@@ -16,8 +16,12 @@ const NUMBER_LOCALE = "en-IN";
 export function formatDate(value: string | Date | null | undefined): string {
   if (value == null || value === "") return "";
   const date = typeof value === "string" ? new Date(value) : value;
-  if (Number.isNaN(date.getTime())) return typeof value === "string" ? value : "";
+  if (Number.isNaN(date.getTime()))
+    return typeof value === "string" ? value : "";
   return new Intl.DateTimeFormat(DATE_LOCALE, {
+    ...(typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
+      ? { timeZone: "UTC" }
+      : {}),
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -27,4 +31,23 @@ export function formatDate(value: string | Date | null | undefined): string {
 /** Integer with Indian grouping, e.g. 1234567 -> "12,34,567". */
 export function formatNumber(value: number): string {
   return new Intl.NumberFormat(NUMBER_LOCALE).format(value);
+}
+
+/** Exact local timestamp, including seconds and timezone, for access decisions. */
+export function formatDateTime(
+  value: string | Date | null | undefined,
+  locale = DATE_LOCALE,
+): string {
+  if (!value) return "";
+  const date = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    timeZoneName: "short",
+  }).format(date);
 }

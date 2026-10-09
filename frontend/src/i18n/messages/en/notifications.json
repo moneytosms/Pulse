@@ -23,7 +23,7 @@
       "CONSENT_REVOKED": "Consent revoked",
       "RECORD_UPLOADED": "Record uploaded",
       "BREAK_GLASS_ACCESS": "Emergency access",
-      "DAILY_DIGEST": "Daily digest"
+      "DAILY_DIGEST": "Activity since last check"
     }
   },
   "preferences": {
@@ -40,5 +40,12 @@
       "SMS": "SMS",
       "IN_APP": "In-app"
     }
+  },
+  "content": {
+    "CONSENT_GRANTED": "Consent was granted on your account.",
+    "CONSENT_REVOKED": "Consent was revoked. Access under that consent has ended.",
+    "RECORD_UPLOADED": "A provider attached a document to your record.",
+    "BREAK_GLASS_ACCESS": "A clinician used emergency access to your records without consent.",
+    "DAILY_DIGEST": "Your records were viewed {count, plural, one {# time} other {# times}} since your last check."
   }
 }

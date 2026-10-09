@@ -148,7 +148,7 @@ test("admin duplicate review lists a candidate and merges it", async ({ page }) 
               },
             },
           ];
-      return json(200, items);
+      return json(200, { items, nextCursor: null });
     }
     if (url.pathname === "/api/v1/admin/duplicate-review/merge" && req.method() === "POST") {
       mergedItems.push(CANDIDATE_ID);
@@ -164,7 +164,7 @@ test("admin duplicate review lists a candidate and merges it", async ({ page }) 
     if (url.pathname === "/api/v1/admin/merges") {
       return json(
         200,
-        mergedItems.length && !reversed
+        {items: mergedItems.length && !reversed
           ? [
               {
                 id: "merge-1",
@@ -176,7 +176,7 @@ test("admin duplicate review lists a candidate and merges it", async ({ page }) 
                 loserName: "Anand K.",
               },
             ]
-          : [],
+          : [], nextCursor: null},
       );
     }
     if (url.pathname === "/api/v1/admin/merges/merge-1/reverse" && req.method() === "POST") {
@@ -201,9 +201,10 @@ test("admin duplicate review lists a candidate and merges it", async ({ page }) 
   // candidates that read as the same name.
   await expect(page.getByText("Anand Kumar").first()).toBeVisible();
 
-  await page.getByRole("button", { name: "Merge" }).click();
+  await page.getByRole("button", { name: "Merge", exact: true }).click();
+  await page.getByRole("button", { name: "Confirm merge", exact: true }).click();
   await expect(page.getByText("No duplicate candidates are waiting for review.")).toBeVisible();
-  await expect(page.getByText("Reversible merges")).toBeVisible();
+  await expect(page.getByText("Recent merges")).toBeVisible();
 
   // A reload loses in-memory state; the merge must still be reversible.
   await page.reload();

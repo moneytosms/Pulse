@@ -60,6 +60,24 @@
       "loading": "दस्तावेज़ लोड हो रहा है…",
       "unsupported": "इस फ़ाइल प्रकार के लिए पूर्वावलोकन उपलब्ध नहीं है।",
       "close": "पूर्वावलोकन बंद करें"
-    }
+    },
+    "supersededNotice": "इस प्रविष्टि की जगह संशोधित प्रविष्टि आ गई है।",
+    "viewCurrent": "वर्तमान संस्करण देखें"
+  },
+  "search": {
+    "label": "Medical Entries खोजें",
+    "placeholder": "नाम या दर्ज पाठ",
+    "from": "शुरुआत की तारीख",
+    "through": "अंतिम तारीख",
+    "more": "और फ़िल्टर: तारीखें और Provider",
+    "provider": "Provider",
+    "allProviders": "सभी Providers",
+    "providerError": "Provider विकल्प लोड नहीं हो सके। टाइमलाइन फिर लोड करें।",
+    "timezone": "तारीख फ़िल्टर पूरे UTC दिन को शामिल करते हैं।",
+    "dateOrder": "शुरुआत की तारीख अंतिम तारीख से पहले या उसी दिन होनी चाहिए।",
+    "apply": "इतिहास खोजें",
+    "reset": "फ़िल्टर हटाएँ",
+    "emptyTitle": "कोई मिलती-जुलती Medical Entry नहीं",
+    "emptyBody": "खोज, तारीखें या Provider फ़िल्टर बदलें या हटाएँ।"
   }
 }

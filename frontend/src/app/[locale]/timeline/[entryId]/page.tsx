@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClinicalText } from "@/components/ClinicalText";
+import { EntryStatus } from "@/components/EntryStatus";
 import { DocumentViewer } from "@/components/DocumentViewer";
 import {
   FlaskConicalIcon,
@@ -239,16 +240,7 @@ function EntryDetailView({ entry }: { entry: EntryDetail }) {
         </h1>
       </div>
 
-      {entry.supersedesId && (
-        <Alert>
-          <AlertDescription>
-            <span>{t("detail.correctsNotice")}</span>{" "}
-            <Button asChild variant="link" className="h-auto p-0">
-              <Link href={`/timeline/${entry.supersedesId}`}>{t("detail.viewPrevious")}</Link>
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
+      <EntryStatus entry={entry} hrefPrefix={"/timeline"} />
 
       <dl className="divide-y rounded-xl border bg-card shadow-sm">
         {rows.map(([label, value]) => (

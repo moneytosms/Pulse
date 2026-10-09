@@ -39,12 +39,12 @@ function Shell({ children }: { children: ReactNode }) {
         <AppHeader />
         <main
           id="main"
-          className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:py-10"
+          className="max-sm:pb-24 mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:py-10"
         >
           {children}
         </main>
         <footer className="border-t">
-          <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+          <div className="max-sm:pb-24 mx-auto flex max-w-6xl flex-col gap-1 px-4 py-5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
             <p>
               {t("name")} — {t("tagline")}
             </p>

@@ -8,9 +8,10 @@ service owns the transaction boundary.
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import cast
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, extract, or_, select, update
+from sqlalchemy import ColumnElement, extract, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.authz import Role
@@ -188,3 +189,136 @@ async def list_unreversed_merges(session: AsyncSession) -> list[PatientMerge]:
         .order_by(PatientMerge.occurred_at.desc())
     )
     return list(result.scalars().all())
+
+
+async def lock_patients(session: AsyncSession, patient_ids: list[UUID]) -> list[Patient]:
+    return list(
+        (
+            await session.scalars(
+                select(Patient)
+                .where(Patient.id.in_(patient_ids))
+                .order_by(Patient.id)
+                .with_for_update(of=Patient)
+                .execution_options(populate_existing=True)
+            )
+        ).all()
+    )
+
+
+async def get_merge_for_update(session: AsyncSession, merge_id: UUID) -> PatientMerge | None:
+    return (
+        await session.scalars(
+            select(PatientMerge)
+            .where(PatientMerge.id == merge_id)
+            .with_for_update(of=PatientMerge)
+            .execution_options(populate_existing=True)
+        )
+    ).one_or_none()
+
+
+async def has_open_merge(
+    session: AsyncSession, patient_ids: list[UUID], excluding: UUID | None = None
+) -> bool:
+    stmt = select(PatientMerge.id).where(
+        PatientMerge.reversed_at.is_(None),
+        or_(
+            PatientMerge.winner_patient_id.in_(patient_ids),
+            PatientMerge.loser_patient_id.in_(patient_ids),
+        ),
+    )
+    if excluding is not None:
+        stmt = stmt.where(PatientMerge.id != excluding)
+    return bool(await session.scalar(stmt.limit(1)))
+
+
+async def pending_review_page(
+    session: AsyncSession, *, cursor: str | None, limit: int
+) -> tuple[list[DuplicateReviewItem], str | None]:
+    from app.core.errors import ErrorCode
+    from app.core.exceptions import PulseError
+    from app.core.pagination import decode_cursor, encode_cursor
+
+    limit = max(1, min(limit, 100))
+    stmt = select(DuplicateReviewItem).where(DuplicateReviewItem.status == ReviewStatus.PENDING)
+    if cursor:
+        try:
+            score, uid = decode_cursor(cursor).split("|", 1)
+            value, identifier = Decimal(score), UUID(uid)
+            if not value.is_finite() or not 0 <= value <= 1:
+                raise ValueError("Invalid score")
+        except (ValueError, ArithmeticError) as error:
+            raise PulseError(
+                ErrorCode.VALIDATION_ERROR, "Invalid cursor.", http_status=422
+            ) from error
+        stmt = stmt.where(
+            or_(
+                DuplicateReviewItem.score < value,
+                (DuplicateReviewItem.score == value) & (DuplicateReviewItem.id < identifier),
+            )
+        )
+    rows = list(
+        (
+            await session.scalars(
+                stmt.order_by(
+                    DuplicateReviewItem.score.desc(), DuplicateReviewItem.id.desc()
+                ).limit(limit + 1)
+            )
+        ).all()
+    )
+    more = len(rows) > limit
+    rows = rows[:limit]
+    tail = rows[-1] if rows else None
+    return rows, encode_cursor(f"{tail.score}|{tail.id}") if more and tail else None
+
+
+async def unreversed_merge_page(
+    session: AsyncSession, *, cursor: str | None, limit: int
+) -> tuple[list[PatientMerge], str | None]:
+    from app.core.pagination import encode_cursor, unpack_cursor
+
+    limit = max(1, min(limit, 100))
+    stmt = select(PatientMerge).where(PatientMerge.reversed_at.is_(None))
+    if cursor:
+        occurred, identifier = unpack_cursor(cursor)
+        stmt = stmt.where(
+            or_(
+                PatientMerge.occurred_at < occurred,
+                (PatientMerge.occurred_at == occurred) & (PatientMerge.id < identifier),
+            )
+        )
+    rows = list(
+        (
+            await session.scalars(
+                stmt.order_by(PatientMerge.occurred_at.desc(), PatientMerge.id.desc()).limit(
+                    limit + 1
+                )
+            )
+        ).all()
+    )
+    more = len(rows) > limit
+    rows = rows[:limit]
+    tail = rows[-1] if rows else None
+    return rows, encode_cursor(
+        f"{tail.occurred_at.isoformat()}|{tail.id}"
+    ) if more and tail else None
+
+
+async def operation_time(session: AsyncSession) -> datetime:
+    return cast(datetime, (await session.execute(select(func.clock_timestamp()))).scalar_one())
+
+
+def audit_patient_scope(
+    patient_id: UUID, event_patient_id: ColumnElement[UUID | None]
+) -> ColumnElement[bool]:
+    originals = select(Patient.id).where(Patient.merged_into_id == patient_id)
+    return or_(event_patient_id == patient_id, event_patient_id.in_(originals))
+
+
+async def patient_map(session: AsyncSession, patient_ids: list[UUID]) -> dict[UUID, Patient]:
+    rows = (await session.scalars(select(Patient).where(Patient.id.in_(patient_ids)))).all()
+    return {patient.id: patient for patient in rows}
+
+
+async def user_email_map(session: AsyncSession, user_ids: list[UUID]) -> dict[UUID, str]:
+    rows = (await session.execute(select(User.id, User.email).where(User.id.in_(user_ids)))).all()
+    return {row.id: row.email for row in rows}

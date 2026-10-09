@@ -147,6 +147,32 @@ async def test_grant_with_step_up_creates_a_live_permission(
     assert [c["id"] for c in listing.json()["items"]] == [body["id"]]
 
 
+async def test_current_access_filter_precedes_pagination_and_retains_overlapping_grants(
+    client: AsyncClient, register_and_login: RegisterAndLogin, app_database_url: str
+) -> None:
+    await register_and_login(email="consent-current@example.com")
+    await register_and_login(email="consent-current-clin@example.com", role="CLINICIAN")
+    clin_id = str(await rh.user_id_for_email(app_database_url, "consent-current-clin@example.com"))
+    await register_and_login(email="consent-current@example.com")
+    await client.post("/api/v1/auth/step-up", json={"password": _PW})
+    old = await client.post("/api/v1/consents", json=_grant_body(clin_id))
+    recent = await client.post("/api/v1/consents", json=_grant_body(clin_id))
+    assert old.status_code == recent.status_code == 200
+    await client.post(f"/api/v1/consents/{recent.json()['id']}/revocation", json={})
+    # Newest row is revoked; an active query with limit=1 must still find the older grant.
+    current = await client.get("/api/v1/consents", params={"view": "active", "limit": 1})
+    assert current.status_code == 200
+    assert [row["id"] for row in current.json()["items"]] == [old.json()["id"]]
+    assert current.json()["nextCursor"] is None
+    history = await client.get("/api/v1/consents", params={"view": "history", "limit": 1})
+    assert [row["id"] for row in history.json()["items"]] == [recent.json()["id"]]
+    await register_and_login(email="consent-current-other@example.com")
+    denied = await client.get(
+        "/api/v1/consents", params={"view": "active", "patientId": old.json()["patientId"]}
+    )
+    assert denied.status_code == 404
+
+
 async def test_revoke_requires_no_step_up(
     client: AsyncClient, register_and_login: RegisterAndLogin, app_database_url: str
 ) -> None:

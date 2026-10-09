@@ -174,3 +174,9 @@ Thumbs.db
 *.bak
 *.swp
 *.swo
+
+# Committed OpenAPI client contract, regenerated and checked in CI.
+!frontend/src/lib/generated/
+!frontend/src/lib/generated/api.ts
+frontend/test-results/
+frontend/playwright-report/

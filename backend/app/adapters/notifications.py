@@ -6,6 +6,8 @@ carry no clinical data (clinical-safety.md).
 """
 
 import asyncio
+import logging
+import smtplib
 from abc import ABC, abstractmethod
 from email.message import EmailMessage
 from typing import Any
@@ -47,7 +49,14 @@ class SmtpNotificationProvider(NotificationProvider):
         msg["To"] = address
         msg["Subject"] = f"Pulse notification: {type_}"
         msg.set_content(f"{type_}: {params}")
-        await asyncio.to_thread(self._smtp_send, msg)
+        try:
+            await asyncio.to_thread(self._smtp_send, msg)
+        except (OSError, smtplib.SMTPException) as error:
+            # Required in-app history was already committed. SMTP remains
+            # best effort; do not log recipient, params or message contents.
+            logging.getLogger(__name__).warning(
+                "Notification email failed: %s", type(error).__name__
+            )
 
     def _smtp_send(self, msg: EmailMessage) -> None:
         send_message(msg, self._smtp)

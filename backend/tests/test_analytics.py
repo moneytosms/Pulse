@@ -15,6 +15,7 @@ own User only — the negative case here is a denial, not an empty list.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
@@ -57,7 +58,7 @@ async def _provider(db_session: AsyncSession, name: str = "Test Provider") -> Pr
     return provider
 
 
-async def test_unrelated_actor_gets_empty_series_everywhere(db_session: AsyncSession) -> None:
+async def test_unrelated_actor_is_denied_on_every_clinical_series(db_session: AsyncSession) -> None:
     owner = await _user(db_session)
     patient = await _patient(db_session, owner)
     entry = LabReport(
@@ -74,20 +75,23 @@ async def test_unrelated_actor_gets_empty_series_everywhere(db_session: AsyncSes
     stranger = await _user(db_session)
     actor = Actor(user_id=stranger.id, role=Role.PATIENT)
 
-    assert (
-        await analytics_service.lab_trend(
-            db_session, actor, patient.id, code_system="LOINC", code="2345-7"
-        )
-        == []
-    )
-    assert await analytics_service.lab_tests(db_session, actor, patient.id) == []
-    assert await analytics_service.visit_frequency_by_month(db_session, actor, patient.id) == []
-    assert await analytics_service.active_medications(db_session, actor, patient.id) == []
-    assert await analytics_service.provider_entry_counts(db_session, actor, patient.id) == []
-    # Identity flags are gated (P4.2 security review): a stranger's patient_id
-    # is a capability probe, so data_quality_flags denies before anything reads.
+    await db_session.commit()
+    patient_id = patient.id
+    calls: list[Callable[[], Awaitable[object]]] = [
+        lambda: analytics_service.lab_trend(
+            db_session, actor, patient_id, code_system="LOINC", code="2345-7"
+        ),
+        lambda: analytics_service.lab_tests(db_session, actor, patient_id),
+        lambda: analytics_service.visit_frequency_by_month(db_session, actor, patient_id),
+        lambda: analytics_service.active_medications(db_session, actor, patient_id),
+        lambda: analytics_service.provider_entry_counts(db_session, actor, patient_id),
+    ]
+    for call in calls:
+        with pytest.raises(PulseError) as denied:
+            await call()
+        assert denied.value.code is ErrorCode.NOT_FOUND
     with pytest.raises(PulseError) as denied:
-        await analytics_service.data_quality_flags(db_session, actor, patient.id)
+        await analytics_service.data_quality_flags(db_session, actor, patient_id)
     assert denied.value.code is ErrorCode.FORBIDDEN
 
 

@@ -6,17 +6,17 @@ Built for an Indian demographic, in English, Hindi, Tamil and Malayalam. An acad
 
 ## Status
 
-**Phase 0 and Phase 1 complete.** Identity, auth, opaque Redis sessions, the seed pipeline, the patient profile, and the default-deny enforcement lints are on `main` and demoable. Phase 2 (the records spine) is next.
+**Records, consent and the demo portals are implemented.** The stack includes entry filing/corrections, persistent documents, scoped consent and emergency access, audit history, localized notifications, computed analytics and administrator duplicate review. See [`docs/verification-and-operations.md`](docs/verification-and-operations.md) for checks, operational limits and remaining product workflows.
 
 | | |
 |---|---|
 | Architecture | Locked. See [`docs/architecture.md`](docs/architecture.md) |
 | Domain model | Locked. See [`docs/domain-model.md`](docs/domain-model.md) |
 | API contract | Locked. See [`docs/api-conventions.md`](docs/api-conventions.md) |
-| Decisions | 15 ADRs in [`docs/adr/`](docs/adr/) |
+| Decisions | 16 ADRs in [`docs/adr/`](docs/adr/) |
 | Delivery plan | [`docs/delivery-plan.md`](docs/delivery-plan.md), tracked on [#17](https://github.com/moneytosms/Pulse/issues/17) |
 | Build order | [#22](https://github.com/moneytosms/Pulse/issues/22) — every step, its blocker, and who waits on it |
-| Code | `backend/` (FastAPI, 42 tests) · `frontend/` (Next.js) · `seed/` (Synthea + Indian overlay) |
+| Code | `backend/` (FastAPI, real-database integration tests) · `frontend/` (Next.js) · `seed/` (Synthea + Indian overlay) |
 
 ## Quickstart
 
@@ -34,7 +34,7 @@ On first boot the backend runs migrations and seeds identity data. Then:
 - Mailpit inbox (default local verification emails): `http://localhost:8025`; Gmail SMTP setup is in [`docs/demo.md`](docs/demo.md)
 - Seeded patient login: `demo.patient.hi@example.com` / `Pulse@demo1` (also `demo.patient.en@example.com`; see [`seed/README.md`](seed/README.md))
 
-Demo journey: register → open the verification link in Mailpit → log in → the seeded profile → switch `/en` ↔ `/hi`.
+Demo journey: provider files an entry → patient grants clinician access with password confirmation → clinician reads → patient reviews access history → patient revokes → clinician is locked out. The live browser suite rehearses this through Caddy.
 
 ## Shape
 

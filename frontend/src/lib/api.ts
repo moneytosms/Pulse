@@ -10,19 +10,12 @@
 
 const API_BASE = "/api/v1";
 
-/** One field-level validation failure (docs/api-conventions.md `details`). */
-export interface ApiErrorDetail {
-  field?: string | null;
-  code?: string | null;
-}
-
-/** The coded error envelope every non-2xx response carries. */
-export interface ApiErrorBody {
-  code: string;
-  message: string;
-  details?: ApiErrorDetail[];
-  requestId?: string;
-}
+import type { ErrorCode, ErrorDetail, ErrorBody } from "./generated/api";
+export type { ErrorCode } from "./generated/api";
+export type ApiErrorDetail = ErrorDetail;
+export type ApiErrorBody = Pick<ErrorBody, "message"> & Partial<Omit<ErrorBody, "code" | "message">> & {
+  code: ErrorCode | "NETWORK" | "GENERIC";
+};
 
 /**
  * Thrown for any non-2xx response, and for a transport failure (offline).
@@ -30,10 +23,10 @@ export interface ApiErrorBody {
  * (ADR-0013) — `message` is kept only for logs.
  */
 export class ApiError extends Error {
-  readonly code: string;
+  readonly code: ApiErrorBody["code"];
   readonly status: number;
   readonly details?: ApiErrorDetail[];
-  readonly requestId?: string;
+  readonly requestId?: string | null;
 
   constructor(status: number, body: ApiErrorBody) {
     super(body.message || body.code);

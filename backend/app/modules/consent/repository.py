@@ -11,12 +11,14 @@ cached permission" mechanism (clinical-safety.md), not a TTL.
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Any, Literal
 from uuid import UUID
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import ColumnElement, Date, String, cast, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement as Expression
 
-from app.core.pagination import decode_cursor, encode_cursor
+from app.core.pagination import encode_cursor, unpack_cursor
 from app.modules.consent.models import AccessPermission, BreakGlassAccess, Consent
 from app.modules.consent.schemas import ConsentPurpose
 
@@ -28,13 +30,18 @@ def _pack_cursor(granted_at: datetime, consent_id: UUID) -> str:
 
 
 def _unpack_cursor(cursor: str) -> tuple[datetime, UUID]:
-    raw = decode_cursor(cursor)
-    ts, _, uid = raw.partition("|")
-    return datetime.fromisoformat(ts), UUID(uid)
+    return unpack_cursor(cursor)
 
 
 async def get_consent_by_id(session: AsyncSession, consent_id: UUID) -> Consent | None:
-    return await session.get(Consent, consent_id)
+    return (
+        await session.scalars(
+            select(Consent)
+            .where(Consent.id == consent_id)
+            .with_for_update(of=Consent)
+            .execution_options(populate_existing=True)
+        )
+    ).one_or_none()
 
 
 async def create_consent_and_permission(
@@ -80,7 +87,14 @@ async def revoke_consent(
 ) -> Consent | None:
     """Returns None when there is no such consent, or it is already
     revoked — revocation is not repeatable."""
-    consent = await session.get(Consent, consent_id)
+    consent = (
+        await session.scalars(
+            select(Consent)
+            .where(Consent.id == consent_id)
+            .with_for_update(of=Consent)
+            .execution_options(populate_existing=True)
+        )
+    ).one_or_none()
     if consent is None or consent.revoked_at is not None:
         return None
     consent.revoked_at = revoked_at
@@ -91,10 +105,20 @@ async def revoke_consent(
 
 
 async def list_consents_for_patient(
-    session: AsyncSession, patient_id: UUID, *, cursor: str | None, limit: int
+    session: AsyncSession,
+    patient_id: UUID,
+    *,
+    cursor: str | None,
+    limit: int,
+    view: Literal["active", "history"] | None = None,
 ) -> tuple[list[Consent], str | None]:
     limit = max(1, min(limit, _MAX_LIMIT))
     stmt = select(Consent).where(Consent.patient_id == patient_id)
+    active = (Consent.revoked_at.is_(None)) & (Consent.expires_at > func.statement_timestamp())
+    if view == "active":
+        stmt = stmt.where(active)
+    elif view == "history":
+        stmt = stmt.where(~active)
     if cursor is not None:
         c_at, c_id = _unpack_cursor(cursor)
         stmt = stmt.where(
@@ -158,3 +182,95 @@ async def create_break_glass(
     session.add(grant)
     await session.flush()
     return grant
+
+
+def clinical_access_predicate(
+    patient_id: UUID,
+    grantee_user_id: UUID,
+    entry_type: Expression[Any],
+    occurred_at: Expression[Any],
+) -> ColumnElement[bool]:
+    permission = (
+        select(AccessPermission.id)
+        .where(
+            AccessPermission.patient_id == patient_id,
+            AccessPermission.grantee_user_id == grantee_user_id,
+            AccessPermission.expires_at > func.statement_timestamp(),
+            or_(
+                AccessPermission.entry_types.is_(None),
+                cast(entry_type, String) == func.any(AccessPermission.entry_types),
+            ),
+            or_(
+                AccessPermission.from_date.is_(None),
+                cast(occurred_at.op("AT TIME ZONE")("UTC"), Date) >= AccessPermission.from_date,
+            ),
+            or_(
+                AccessPermission.to_date.is_(None),
+                cast(occurred_at.op("AT TIME ZONE")("UTC"), Date) <= AccessPermission.to_date,
+            ),
+        )
+        .correlate_except(AccessPermission)
+        .exists()
+    )
+    emergency = (
+        select(BreakGlassAccess.id)
+        .where(
+            BreakGlassAccess.patient_id == patient_id,
+            BreakGlassAccess.clinician_user_id == grantee_user_id,
+            BreakGlassAccess.expires_at > func.statement_timestamp(),
+        )
+        .exists()
+    )
+    return or_(permission, emergency)
+
+
+async def live_permissions_for(
+    session: AsyncSession, patient_id: UUID, grantee_user_id: UUID
+) -> list[AccessPermission]:
+    return list(
+        (
+            await session.scalars(
+                select(AccessPermission).where(
+                    AccessPermission.patient_id == patient_id,
+                    AccessPermission.grantee_user_id == grantee_user_id,
+                    AccessPermission.expires_at > func.statement_timestamp(),
+                )
+            )
+        ).all()
+    )
+
+
+async def active_break_glass_for(
+    session: AsyncSession, patient_id: UUID, clinician_user_id: UUID
+) -> bool:
+    return bool(
+        await session.scalar(
+            select(BreakGlassAccess.id)
+            .where(
+                BreakGlassAccess.patient_id == patient_id,
+                BreakGlassAccess.clinician_user_id == clinician_user_id,
+                BreakGlassAccess.expires_at > func.statement_timestamp(),
+            )
+            .limit(1)
+        )
+    )
+
+
+async def has_live_patient_grants(session: AsyncSession, patient_id: UUID) -> bool:
+    permission = (
+        select(AccessPermission.id)
+        .where(
+            AccessPermission.patient_id == patient_id,
+            AccessPermission.expires_at > func.statement_timestamp(),
+        )
+        .exists()
+    )
+    emergency = (
+        select(BreakGlassAccess.id)
+        .where(
+            BreakGlassAccess.patient_id == patient_id,
+            BreakGlassAccess.expires_at > func.statement_timestamp(),
+        )
+        .exists()
+    )
+    return bool(await session.scalar(select(or_(permission, emergency))))

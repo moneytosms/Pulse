@@ -65,7 +65,10 @@ async def test_notify_inserts_a_row_for_an_optional_type_with_no_preference_set(
 ) -> None:
     user_id = await _make_patient_user(db_session, "notify-default@example.com")
     result = await service.notify(
-        db_session, user_id, NotificationType.RECORD_UPLOADED, {"entryId": "e1"}
+        db_session,
+        user_id,
+        NotificationType.RECORD_UPLOADED,
+        {"entryId": "00000000-0000-0000-0000-000000000001"},
     )
     assert result is not None
     rows = await _rows_for(db_session, user_id)
@@ -84,7 +87,10 @@ async def test_notify_is_suppressed_when_the_in_app_preference_is_disabled(
         enabled=False,
     )
     result = await service.notify(
-        db_session, user_id, NotificationType.RECORD_UPLOADED, {"entryId": "e1"}
+        db_session,
+        user_id,
+        NotificationType.RECORD_UPLOADED,
+        {"entryId": "00000000-0000-0000-0000-000000000001"},
     )
     assert result is None
     rows = await _rows_for(db_session, user_id)
@@ -105,7 +111,10 @@ async def test_notify_ignores_a_disabled_preference_for_a_mandatory_type(
         enabled=False,
     )
     result = await service.notify(
-        db_session, user_id, NotificationType.CONSENT_REVOKED, {"consentId": "c1"}
+        db_session,
+        user_id,
+        NotificationType.CONSENT_REVOKED,
+        {"consentId": "00000000-0000-0000-0000-000000000003"},
     )
     assert result is not None
 
@@ -120,7 +129,7 @@ async def test_notify_schedules_provider_send_for_a_mandatory_type(
         db_session,
         user_id,
         NotificationType.BREAK_GLASS_ACCESS,
-        {"providerId": "p1"},
+        {"providerId": "00000000-0000-0000-0000-000000000002"},
         provider=provider,
         background_tasks=scheduler,
     )
@@ -144,7 +153,7 @@ async def test_notify_does_not_schedule_provider_send_for_an_optional_type(
         db_session,
         user_id,
         NotificationType.RECORD_UPLOADED,
-        {"entryId": "e1"},
+        {"entryId": "00000000-0000-0000-0000-000000000001"},
         provider=provider,
         background_tasks=scheduler,
     )
@@ -155,7 +164,10 @@ async def test_mark_read_sets_read_at(db_session: AsyncSession) -> None:
     user_id = await _make_patient_user(db_session, "mark-read@example.com")
     actor = Actor(user_id=user_id, role=Role.PATIENT)
     created = await service.notify(
-        db_session, user_id, NotificationType.RECORD_UPLOADED, {"entryId": "e1"}
+        db_session,
+        user_id,
+        NotificationType.RECORD_UPLOADED,
+        {"entryId": "00000000-0000-0000-0000-000000000001"},
     )
     assert created is not None
     updated = await service.mark_read(db_session, actor, created.id)
@@ -166,7 +178,10 @@ async def test_mark_read_is_idempotent(db_session: AsyncSession) -> None:
     user_id = await _make_patient_user(db_session, "mark-read-twice@example.com")
     actor = Actor(user_id=user_id, role=Role.PATIENT)
     created = await service.notify(
-        db_session, user_id, NotificationType.RECORD_UPLOADED, {"entryId": "e1"}
+        db_session,
+        user_id,
+        NotificationType.RECORD_UPLOADED,
+        {"entryId": "00000000-0000-0000-0000-000000000001"},
     )
     assert created is not None
     first = await service.mark_read(db_session, actor, created.id)
@@ -181,7 +196,10 @@ async def test_mark_read_on_someone_elses_notification_is_not_found(
     other_id = await _make_patient_user(db_session, "mark-read-other@example.com")
     other_actor = Actor(user_id=other_id, role=Role.PATIENT)
     created = await service.notify(
-        db_session, owner_id, NotificationType.RECORD_UPLOADED, {"entryId": "e1"}
+        db_session,
+        owner_id,
+        NotificationType.RECORD_UPLOADED,
+        {"entryId": "00000000-0000-0000-0000-000000000001"},
     )
     assert created is not None
     try:

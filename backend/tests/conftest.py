@@ -140,7 +140,12 @@ async def client(db_engine: AsyncEngine, fake_idp: object) -> AsyncIterator[Asyn
 
     async def _override_session() -> AsyncIterator[AsyncSession]:
         async with maker() as session:
-            yield session
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
     app.dependency_overrides[get_session] = _override_session
     app.dependency_overrides[get_identity_provider] = lambda: fake_idp

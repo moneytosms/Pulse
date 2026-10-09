@@ -11,10 +11,12 @@ import {
   TriangleAlertIcon,
 } from "lucide-react";
 import type { BarDatum } from "@/components/charts/BarChart";
-import type { LinePoint } from "@/components/charts/LineChart";
+import { LabTrendResults } from "@/components/LabTrendResults";
 import { ClinicalText } from "@/components/ClinicalText";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -53,10 +55,6 @@ import { formatDate, formatNumber } from "@/lib/format";
 const ChartSkeleton = () => <Skeleton className="h-40 w-full" />;
 const BarChart = dynamic(
   () => import("@/components/charts/BarChart").then((m) => m.BarChart),
-  { ssr: false, loading: ChartSkeleton },
-);
-const LineChart = dynamic(
-  () => import("@/components/charts/LineChart").then((m) => m.LineChart),
   { ssr: false, loading: ChartSkeleton },
 );
 
@@ -149,16 +147,23 @@ function DashboardSkeleton() {
 
 export default function AnalyticsPage() {
   const t = useTranslations("analytics");
+  const tActions = useTranslations("actions");
   const errorMessage = useApiErrorMessage();
   const router = useRouter();
 
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [labError, setLabError] = useState<string | null>(null);
+  const [retryToken, setRetryToken] = useState(0);
   const [patientId, setPatientId] = useState<string | null>(null);
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [selectedTest, setSelectedTest] = useState("");
   const [labTrend, setLabTrend] = useState<LabTrendPoint[] | null>(null);
 
   useEffect(() => {
+    if (patientId) return;
     let active = true;
+    Promise.resolve().then(() => { if (active) setState({ status: "loading" }); });
     api
       .get<{ id: string }>("/patients/me")
       .then((profile) => {
@@ -180,19 +185,24 @@ export default function AnalyticsPage() {
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [patientId, retryToken]);
 
   useEffect(() => {
     if (!patientId) return;
     let active = true;
     const base = `/patients/${patientId}/analytics`;
+    const window = new URLSearchParams();
+    if (fromDate) window.set("fromDate", fromDate);
+    if (toDate) window.set("toDate", toDate);
+    const query = window.size ? `?${window}` : "";
+    Promise.resolve().then(() => { if (active) setState({ status: "loading" }); });
 
     Promise.all([
-      api.get<MonthlyVisitCount[]>(`${base}/visit-frequency`),
-      api.get<MedicationSummary[]>(`${base}/active-medications`),
-      api.get<ProviderEntryCount[]>(`${base}/provider-entry-counts`),
+      api.get<MonthlyVisitCount[]>(`${base}/visit-frequency${query}`),
+      api.get<MedicationSummary[]>(`${base}/active-medications${query}`),
+      api.get<ProviderEntryCount[]>(`${base}/provider-entry-counts${query}`),
       api.get<DataQualityFlag[]>(`${base}/data-quality-flags`),
-      api.get<LabTest[]>(`${base}/lab-tests`).catch(() => [] as LabTest[]),
+      api.get<LabTest[]>(`${base}/lab-tests${query}`),
     ])
       .then(([visitFrequency, activeMedications, providerEntryCounts, dataQualityFlags, labTests]) => {
         if (!active) return;
@@ -220,25 +230,29 @@ export default function AnalyticsPage() {
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [patientId]);
+  }, [patientId, fromDate, toDate, retryToken]);
 
   useEffect(() => {
     if (!patientId || !selectedTest) return;
     let active = true;
     const [codeSystem, code] = selectedTest.split("|");
     const params = new URLSearchParams({ codeSystem, code });
+    if (fromDate) params.set("fromDate", fromDate);
+    if (toDate) params.set("toDate", toDate);
+    Promise.resolve().then(() => { if (active) { setLabTrend(null); setLabError(null); } });
     api
       .get<LabTrendPoint[]>(`/patients/${patientId}/analytics/lab-trend?${params}`)
       .then((points) => {
         if (active) setLabTrend(points);
       })
-      .catch(() => {
-        if (active) setLabTrend(null);
+      .catch((error) => {
+        if (active) { setLabTrend(null); setLabError(errorMessage(error)); }
       });
     return () => {
       active = false;
     };
-  }, [patientId, selectedTest]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patientId, selectedTest, fromDate, toDate, retryToken]);
 
   const selectedLabTest =
     state.status === "ready"
@@ -254,6 +268,16 @@ export default function AnalyticsPage() {
         <p className="text-sm text-pretty text-muted-foreground">{t("subtitle")}</p>
       </div>
 
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-4">
+          <div className="space-y-1"><Label htmlFor="analytics-from">{t("window.from")}</Label>
+            <Input id="analytics-from" type="date" value={fromDate} onChange={event => setFromDate(event.target.value)} /></div>
+          <div className="space-y-1"><Label htmlFor="analytics-to">{t("window.to")}</Label>
+            <Input id="analytics-to" type="date" value={toDate} onChange={event => setToDate(event.target.value)} /></div>
+        </div>
+        <p className="text-sm text-muted-foreground">{t("window.hint")}</p>
+      </div>
+      {labError && <Alert variant="destructive"><AlertTitle>{t("error.title")}</AlertTitle><AlertDescription>{labError}</AlertDescription></Alert>}
       {state.status === "loading" && (
         <>
           <span className="sr-only">{t("loading")}</span>
@@ -270,11 +294,11 @@ export default function AnalyticsPage() {
       )}
 
       {state.status === "error" && (
-        <Alert variant="destructive">
+        <div className="space-y-3"><Alert variant="destructive">
           <InfoIcon />
           <AlertTitle>{t("error.title")}</AlertTitle>
           <AlertDescription>{state.message}</AlertDescription>
-        </Alert>
+        </Alert><Button variant="outline" onClick={() => setRetryToken(n => n + 1)}>{tActions("retry")}</Button></div>
       )}
 
       {state.status === "ready" && (
@@ -440,37 +464,8 @@ export default function AnalyticsPage() {
                   </Select>
                 </div>
                 {labTrend && labTrend.length > 0 ? (
-                  <>
-                    <LineChart
-                      ariaLabel={t("labTrend.title")}
-                      data={labTrend.map(
-                        (p): LinePoint => ({
-                          x: formatDate(p.occurredAt),
-                          value: p.valueNumeric ?? 0,
-                          abnormal: p.isAbnormal ?? false,
-                        }),
-                      )}
-                    />
-                    <ul className="space-y-1.5 text-sm">
-                      {labTrend
-                        .filter((p) => p.isAbnormal)
-                        .map((p, i) => (
-                          <li
-                            key={i}
-                            className="flex items-center gap-2 rounded-md border border-critical-border bg-critical-surface px-2 py-1 text-critical"
-                          >
-                            <TriangleAlertIcon className="size-4 shrink-0" />
-                            <span className="tabular-nums">
-                              {formatDate(p.occurredAt)} —{" "}
-                              {p.referenceHigh != null && (p.valueNumeric ?? 0) > p.referenceHigh
-                                ? t("labTrend.aboveRange")
-                                : t("labTrend.belowRange")}
-                            </span>
-                          </li>
-                        ))}
-                    </ul>
-                  </>
-                ) : (
+                  <LabTrendResults points={labTrend} />
+                ) : labTrend === null && !labError ? <ChartSkeleton /> : (
                   <p className="text-sm text-muted-foreground">{t("empty")}</p>
                 )}
               </CardContent>

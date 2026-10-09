@@ -34,7 +34,7 @@ def main() -> int:
                 matches.append(f"{rel}:{lineno} -> {line.strip()}")
 
     if not matches:
-        print("0 matches — MedicalEntry not yet defined; lint armed for Phase 2")
+        print("clean — no MedicalEntry reads outside its repository")
         return 0
 
     for m in matches:

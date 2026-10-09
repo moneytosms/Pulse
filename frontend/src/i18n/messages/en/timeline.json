@@ -60,6 +60,24 @@
       "loading": "Loading document…",
       "unsupported": "Preview is not available for this file type.",
       "close": "Close preview"
-    }
+    },
+    "supersededNotice": "This entry has been superseded by a correction.",
+    "viewCurrent": "View current version"
+  },
+  "search": {
+    "label": "Search Medical Entries",
+    "placeholder": "Name or recorded text",
+    "from": "From date",
+    "through": "Through date",
+    "more": "More filters: dates and Provider",
+    "provider": "Provider",
+    "allProviders": "All Providers",
+    "providerError": "Provider options could not be loaded. Retry loading the timeline.",
+    "timezone": "Date filters include the full UTC day.",
+    "dateOrder": "The start date must be on or before the end date.",
+    "apply": "Search history",
+    "reset": "Reset filters",
+    "emptyTitle": "No matching Medical Entries",
+    "emptyBody": "Change or reset your search, dates or Provider filter."
   }
 }

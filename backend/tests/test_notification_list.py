@@ -33,8 +33,12 @@ async def _seed(app_database_url: str, user_id: UUID, count: int) -> None:
     async with identity_session(app_database_url) as session:
         for i in range(count):
             await service.notify(
-                session, user_id, NotificationType.RECORD_UPLOADED, {"entryId": f"e{i}"}
+                session,
+                user_id,
+                NotificationType.RECORD_UPLOADED,
+                {"entryId": f"00000000-0000-0000-0000-{i + 1:012d}"},
             )
+        await session.commit()
 
 
 async def test_cursor_pages_do_not_overlap_or_skip(
@@ -65,7 +69,7 @@ async def test_invalid_cursor_is_a_validation_error(
 ) -> None:
     await register_and_login(email="list-bad-cursor@example.com")
     resp = await client.get("/api/v1/notifications?cursor=not-a-real-cursor")
-    assert resp.status_code == 400
+    assert resp.status_code == 422
     assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
 
 

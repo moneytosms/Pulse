@@ -1,12 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
-import { CircleCheckIcon, CircleXIcon, ClockIcon, ShieldCheckIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
+import {
+  CircleCheckIcon,
+  CircleXIcon,
+  ClockIcon,
+  ShieldCheckIcon,
+} from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,7 +27,7 @@ import { Link, useRouter } from "@/i18n/navigation";
 import { api, ApiError } from "@/lib/api";
 import type { Consent, ConsentStatus, RevocationRequest } from "@/lib/consent";
 import { useApiErrorMessage } from "@/lib/errors";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatDateTime } from "@/lib/format";
 import type { Page } from "@/lib/records";
 
 // Icon + label per status — colour never carries meaning alone
@@ -62,7 +74,9 @@ function ConsentRowLeadIcon({ status }: { status: ConsentStatus }) {
     <div
       className={
         "flex size-9 shrink-0 items-center justify-center rounded-md " +
-        (status === "ACTIVE" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")
+        (status === "ACTIVE"
+          ? "bg-primary/10 text-primary"
+          : "bg-muted text-muted-foreground")
       }
     >
       <ShieldCheckIcon className="size-4" />
@@ -76,7 +90,9 @@ function scopeSummary(
   tTimeline: ReturnType<typeof useTranslations<"timeline">>,
 ): { types: string; window: string } {
   const types = consent.entryTypes?.length
-    ? consent.entryTypes.map((type) => tTimeline(`entryTypes.${type}`)).join(", ")
+    ? consent.entryTypes
+        .map((type) => tTimeline(`entryTypes.${type}`))
+        .join(", ")
     : t("list.scope.allTypes");
 
   const from = consent.fromDate ? formatDate(consent.fromDate) : null;
@@ -142,10 +158,17 @@ function RevokeControl({
 
   return (
     <div className="w-full space-y-2 rounded-xl border bg-muted p-4 shadow-sm sm:w-72">
-      <p className="text-sm font-medium text-foreground">{t("list.revoke.confirmTitle")}</p>
-      <p className="text-xs text-muted-foreground">{t("list.revoke.confirmBody")}</p>
+      <p className="text-sm font-medium text-foreground">
+        {t("list.revoke.confirmTitle")}
+      </p>
+      <p className="text-xs text-muted-foreground">
+        {t("list.revoke.confirmBody")}
+      </p>
       <div className="space-y-1">
-        <Label htmlFor={`revoke-reason-${consent.id}`} className="text-xs text-muted-foreground">
+        <Label
+          htmlFor={`revoke-reason-${consent.id}`}
+          className="text-xs text-muted-foreground"
+        >
           {t("list.revoke.reasonLabel")}
         </Label>
         <Input
@@ -190,6 +213,7 @@ function ConsentRow({
   consent: Consent;
   onRevoked: (updated: Consent) => void;
 }) {
+  const locale = useLocale();
   const t = useTranslations("consent");
   const tTimeline = useTranslations("timeline");
   const { types, window } = scopeSummary(consent, t, tTimeline);
@@ -208,31 +232,43 @@ function ConsentRow({
 
       <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-2">
         <div>
-          <dt className="text-xs text-muted-foreground">{t("list.fields.purpose")}</dt>
+          <dt className="text-xs text-muted-foreground">
+            {t("list.fields.purpose")}
+          </dt>
           <dd className="text-foreground">
             {t(`list.purpose.${consent.purpose}`)}
-            {consent.purpose === "OTHER" && consent.purposeText ? ` — ${consent.purposeText}` : ""}
+            {consent.purpose === "OTHER" && consent.purposeText
+              ? ` — ${consent.purposeText}`
+              : ""}
           </dd>
         </div>
         <div>
-          <dt className="text-xs text-muted-foreground">{t("list.fields.scope")}</dt>
+          <dt className="text-xs text-muted-foreground">
+            {t("list.fields.scope")}
+          </dt>
           <dd className="text-foreground">
             {types}
             <span className="text-muted-foreground"> · {window}</span>
           </dd>
         </div>
         <div>
-          <dt className="text-xs text-muted-foreground">{t("list.fields.granted")}</dt>
-          <dd className="text-foreground">{formatDate(consent.grantedAt)}</dd>
+          <dt className="text-xs text-muted-foreground">
+            {t("list.fields.granted")}
+          </dt>
+          <dd className="text-foreground">
+            {formatDateTime(consent.grantedAt, `${locale}-IN`)}
+          </dd>
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">
-            {consent.status === "REVOKED" ? t("list.fields.revokedAt") : t("list.fields.expires")}
+            {consent.status === "REVOKED"
+              ? t("list.fields.revokedAt")
+              : t("list.fields.expires")}
           </dt>
           <dd className="text-foreground">
             {consent.status === "REVOKED" && consent.revokedAt
-              ? formatDate(consent.revokedAt)
-              : formatDate(consent.expiresAt)}
+              ? formatDateTime(consent.revokedAt, `${locale}-IN`)
+              : formatDateTime(consent.expiresAt, `${locale}-IN`)}
           </dd>
         </div>
       </dl>
@@ -251,13 +287,19 @@ export default function ConsentListPage() {
   const errorMessage = useApiErrorMessage();
   const router = useRouter();
 
+  const [view, setView] = useState<"active" | "history">("active");
   const [patientId, setPatientId] = useState<string | null>(null);
   const [retryToken, setRetryToken] = useState(0);
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  const paginationRequest = useRef<AbortController | null>(null);
   const [revokedNotice, setRevokedNotice] = useState(false);
 
   useEffect(() => {
+    if (patientId) return;
     let active = true;
+    Promise.resolve().then(() => {
+      if (active) setState({ status: "loading" });
+    });
     api
       .get<{ id: string }>("/patients/me")
       .then((profile) => {
@@ -265,7 +307,10 @@ export default function ConsentListPage() {
       })
       .catch((err) => {
         if (!active) return;
-        if (err instanceof ApiError && (err.status === 401 || err.code === "SESSION_EXPIRED")) {
+        if (
+          err instanceof ApiError &&
+          (err.status === 401 || err.code === "SESSION_EXPIRED")
+        ) {
           router.replace("/login");
           return;
         }
@@ -280,7 +325,7 @@ export default function ConsentListPage() {
     };
     // errorMessage / router are stable for the page lifetime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [patientId, retryToken]);
 
   useEffect(() => {
     if (!patientId) return;
@@ -289,7 +334,9 @@ export default function ConsentListPage() {
       if (active) setState({ status: "loading" });
     });
     api
-      .get<Page<Consent>>(`/consents?patientId=${patientId}&limit=${LIMIT}`)
+      .get<Page<Consent>>(
+        `/consents?patientId=${patientId}&limit=${LIMIT}&view=${view}`,
+      )
       .then((page) => {
         if (!active) return;
         setState({
@@ -302,26 +349,66 @@ export default function ConsentListPage() {
       })
       .catch((err) => {
         if (!active) return;
-        if (err instanceof ApiError && (err.status === 401 || err.code === "SESSION_EXPIRED")) {
+        if (
+          err instanceof ApiError &&
+          (err.status === 401 || err.code === "SESSION_EXPIRED")
+        ) {
           router.replace("/login");
           return;
         }
         setState({ status: "error", message: errorMessage(err) });
       });
     return () => {
+      paginationRequest.current?.abort();
       active = false;
     };
     // errorMessage / router are stable for the page lifetime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [patientId, retryToken]);
+  }, [patientId, retryToken, view]);
+
+  useEffect(() => {
+    const refresh = () => setRetryToken((n) => n + 1);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisible);
+    const nextExpiry =
+      state.status === "ready" && view === "active"
+        ? Math.min(
+            ...state.items.map((item) => new Date(item.expiresAt).getTime()),
+          )
+        : Infinity;
+    const timer = Number.isFinite(nextExpiry)
+      ? window.setTimeout(
+          refresh,
+          Math.min(
+            Math.max(nextExpiry - Date.now() + 100, 1000),
+            2_147_483_647,
+          ),
+        )
+      : undefined;
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearTimeout(timer);
+    };
+  }, [state, view]);
 
   function loadMore() {
     if (!patientId || state.status !== "ready" || !state.nextCursor) return;
     const cursor = state.nextCursor;
+    paginationRequest.current?.abort();
+    const controller = new AbortController();
+    paginationRequest.current = controller;
     setState({ ...state, loadingMore: true, loadMoreError: null });
     api
-      .get<Page<Consent>>(`/consents?patientId=${patientId}&limit=${LIMIT}&cursor=${cursor}`)
+      .get<Page<Consent>>(
+        `/consents?patientId=${patientId}&limit=${LIMIT}&view=${view}&cursor=${encodeURIComponent(cursor)}`,
+        { signal: controller.signal },
+      )
       .then((page) => {
+        if (controller.signal.aborted) return;
         setState((prev) =>
           prev.status === "ready"
             ? {
@@ -335,6 +422,7 @@ export default function ConsentListPage() {
         );
       })
       .catch((err) => {
+        if (controller.signal.aborted) return;
         setState((prev) =>
           prev.status === "ready"
             ? { ...prev, loadingMore: false, loadMoreError: errorMessage(err) }
@@ -353,6 +441,7 @@ export default function ConsentListPage() {
         : prev,
     );
     setRevokedNotice(true);
+    setRetryToken((n) => n + 1);
   }
 
   return (
@@ -362,12 +451,37 @@ export default function ConsentListPage() {
           <h1 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
             {t("list.title")}
           </h1>
-          <p className="text-pretty text-sm text-muted-foreground">{t("list.subtitle")}</p>
+          <p className="text-pretty text-sm text-muted-foreground">
+            {t("list.subtitle")}
+          </p>
         </div>
         <Button asChild className="min-h-11 shrink-0 sm:min-h-8">
           <Link href="/consent/new">{t("list.grantCta")}</Link>
         </Button>
       </div>
+
+      <div
+        role="group"
+        aria-label={t("list.views.label")}
+        className="flex flex-wrap gap-2"
+      >
+        {(["active", "history"] as const).map((value) => (
+          <Button
+            key={value}
+            variant={view === value ? "default" : "outline"}
+            aria-pressed={view === value}
+            onClick={() => {
+              paginationRequest.current?.abort();
+              setView(value);
+            }}
+          >
+            {t(`list.views.${value}`)}
+          </Button>
+        ))}
+      </div>
+      <p className="text-sm text-muted-foreground">
+        {t(`list.views.${view}Hint`)}
+      </p>
 
       {revokedNotice && (
         <Alert className="border-consent-active/40 text-consent-active">
@@ -377,7 +491,7 @@ export default function ConsentListPage() {
       )}
 
       {state.status === "loading" && (
-        <div className="space-y-3" aria-hidden="true">
+        <div className="space-y-3" role="status" aria-live="polite">
           <span className="sr-only">{t("list.loading")}</span>
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} className="h-24 w-full rounded-xl" />
@@ -402,11 +516,9 @@ export default function ConsentListPage() {
             <AlertTitle>{t("list.error.title")}</AlertTitle>
             <AlertDescription>{state.message}</AlertDescription>
           </Alert>
-          {patientId && (
-            <Button variant="outline" onClick={() => setRetryToken((n) => n + 1)}>
-              {t("list.error.retry")}
-            </Button>
-          )}
+          <Button variant="outline" onClick={() => setRetryToken((n) => n + 1)}>
+            {t("list.error.retry")}
+          </Button>
         </div>
       )}
 
@@ -416,8 +528,20 @@ export default function ConsentListPage() {
             <EmptyMedia variant="icon">
               <ShieldCheckIcon />
             </EmptyMedia>
-            <EmptyTitle>{t("list.empty.title")}</EmptyTitle>
-            <EmptyDescription>{t("list.empty.body")}</EmptyDescription>
+            <EmptyTitle>
+              {t(
+                view === "active"
+                  ? "list.views.noActive"
+                  : "list.views.noHistory",
+              )}
+            </EmptyTitle>
+            <EmptyDescription>
+              {t(
+                view === "active"
+                  ? "list.views.noActiveBody"
+                  : "list.views.noHistoryBody",
+              )}
+            </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <Button asChild className="min-h-11 sm:min-h-8">
@@ -431,7 +555,11 @@ export default function ConsentListPage() {
         <div className="space-y-4">
           <ul className="space-y-3">
             {state.items.map((consent) => (
-              <ConsentRow key={consent.id} consent={consent} onRevoked={handleRevoked} />
+              <ConsentRow
+                key={consent.id}
+                consent={consent}
+                onRevoked={handleRevoked}
+              />
             ))}
           </ul>
 

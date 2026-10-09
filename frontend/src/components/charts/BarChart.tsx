@@ -52,7 +52,7 @@ export function BarChart({ data, ariaLabel, formatValue, className }: BarChartPr
             tickLine={false}
             axisLine={false}
             tickMargin={8}
-            fontSize={10}
+            fontSize={12}
           />
           <YAxis hide />
           <ChartTooltip
@@ -77,7 +77,7 @@ export function BarChart({ data, ariaLabel, formatValue, className }: BarChartPr
               />
             }
           />
-          <Bar dataKey="value" fill="var(--color-value)" radius={4} />
+          <Bar isAnimationActive={false} dataKey="value" fill="var(--color-value)" radius={4} />
         </RechartsBarChart>
       </ChartContainer>
     </div>

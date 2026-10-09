@@ -1,6 +1,6 @@
 {
   "title": "Who accessed my records",
-  "subtitle": "Every read of your record, recorded automatically.",
+  "subtitle": "Reads, consent changes and other sensitive actions, recorded automatically.",
   "loading": "Loading your access history…",
   "notFound": "We could not find a patient profile linked to your account.",
   "error": {
@@ -20,8 +20,44 @@
   },
   "entryTypeNone": "—",
   "actions": {
-    "ENTRY_VIEWED": "Viewed entries"
+    "ENTRY_VIEWED": "Viewed entries",
+    "ENTRY_CREATED": "Entry filed",
+    "ENTRY_CORRECTED": "Entry corrected",
+    "DOCUMENT_UPLOADED": "Document uploaded",
+    "ANALYTICS_VIEWED": "Analytics viewed",
+    "PATIENT_MERGED": "Patient identities merged",
+    "MERGE_REVERSED": "Merge reversed",
+    "ACCESS_DENIED": "Access denied",
+    "LOGOUT": "Signed out",
+    "LOGOUT_ALL": "All sessions ended",
+    "STEP_UP_SUCCESS": "Password reverified",
+    "STEP_UP_FAILURE": "Password reverification failed",
+    "DOCUMENT_VIEWED": "Document viewed",
+    "CONSENT_GRANTED": "Consent granted",
+    "CONSENT_REVOKED": "Consent revoked",
+    "LOGIN_SUCCESS": "Sign-in succeeded",
+    "LOGIN_FAILURE": "Sign-in failed",
+    "BREAK_GLASS_ACCESS": "Emergency access granted"
   },
   "loadMore": "Load more",
-  "loadingMore": "Loading more…"
+  "loadingMore": "Loading more…",
+  "you": "You",
+  "unknownActor": "Role unavailable",
+  "filters": {
+    "action": "Action",
+    "actor": "Actor role",
+    "allActions": "All actions",
+    "allActors": "All roles",
+    "from": "From date",
+    "through": "Through date",
+    "timezone": "Date filters use UTC days. Event timestamps show your local time and timezone.",
+    "dateOrder": "The start date must be on or before the end date.",
+    "apply": "Apply filters",
+    "reset": "Reset filters",
+    "emptyTitle": "No matching activity",
+    "emptyBody": "Change or reset the filters to view more of your history.",
+    "detailsHint": "A dash means this action was not tied to one Provider or entry type.",
+    "title": "Filter access history",
+    "applied": "Filters applied"
+  }
 }

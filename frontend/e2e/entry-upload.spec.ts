@@ -4,6 +4,14 @@ import { expect, test } from "@playwright/test";
 // (pattern: e2e/timeline.spec.ts). Covers issue #34: field-level validation
 // from the error envelope's `details` array, and explicit 413 handling.
 
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/v1/auth/me", route => route.fulfill({
+    contentType: "application/json", body: JSON.stringify({
+      userId: "u-staff", email: "staff@example.com", role: "PROVIDER_STAFF", emailVerified: true,
+    }),
+  }));
+});
+
 const PATIENT_ID = "22222222-2222-2222-2222-222222222222";
 
 async function fillCommonFields(page: import("@playwright/test").Page) {
@@ -128,7 +136,7 @@ test("Provider Staff files from the patient record with the id prefilled", async
     const json = (status: number, body: unknown) =>
       route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     if (url.pathname.endsWith("/auth/me")) {
-      return json(200, { userId: "u-staff", email: "staff@example.com", role: "PROVIDER_STAFF" });
+      return json(200, { userId: "u-staff", email: "staff@example.com", role: "PROVIDER_STAFF", emailVerified: true });
     }
     if (url.pathname === `/api/v1/patients/${PATIENT_ID}/entries`) {
       return json(200, { items: [], nextCursor: null });

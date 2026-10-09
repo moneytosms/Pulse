@@ -10,18 +10,11 @@ import type { AuditEventProjection } from "@/lib/audit";
 import { formatDate } from "@/lib/format";
 import type { Page } from "@/lib/records";
 
-// A break-glass access is time-boxed, justified and CRITICAL-audited
-// (docs/domain-model.md, delivery-plan.md), and the Patient is notified
-// immediately. There is no `NotificationType` for it yet in the provisional
-// schema (`lib/notifications.ts`), so this banner reads the same audit
-// projection the "who accessed my records" screen uses
-// (.claude/rules/clinical-safety.md: never a second, uncontrolled copy of
-// the event) and looks for a recent `BREAK_GLASS_ACCESS` row. Distinct from
-// the daily digest — this is a persistent, dismiss-free callout on the
-// Patient's own record views, not a rolled-up notification.
+// Supplementary notice from the same patient-scoped audit projection as the
+// history screen. Filter on the server so routine activity cannot bury a
+// recent emergency event beyond an arbitrary first-page limit.
 const RECENT_WINDOW_MS = 72 * 60 * 60 * 1000;
 const BREAK_GLASS_ACTION = "BREAK_GLASS_ACCESS";
-const CHECK_LIMIT = 5;
 
 export function BreakGlassBanner({ patientId }: { patientId: string }) {
   const t = useTranslations("breakGlass");
@@ -29,10 +22,11 @@ export function BreakGlassBanner({ patientId }: { patientId: string }) {
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
+    const params = new URLSearchParams({ patientId, limit: "1", action: BREAK_GLASS_ACTION, since: new Date(Date.now() - RECENT_WINDOW_MS).toISOString() });
+    Promise.resolve().then(() => { if (active) setEvent(null); });
     api
-      .get<Page<AuditEventProjection>>(
-        `/audit-events?patientId=${patientId}&limit=${CHECK_LIMIT}`,
-      )
+      .get<Page<AuditEventProjection>>(`/audit-events?${params}`, { signal: controller.signal })
       .then((page) => {
         if (!active) return;
         const cutoff = Date.now() - RECENT_WINDOW_MS;
@@ -48,6 +42,7 @@ export function BreakGlassBanner({ patientId }: { patientId: string }) {
       });
     return () => {
       active = false;
+      controller.abort();
     };
   }, [patientId]);
 

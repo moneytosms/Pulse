@@ -19,7 +19,7 @@
     }
   },
   "visitFrequency": {
-    "title": "Visits per month"
+    "title": "Entries per month"
   },
   "providerEntryCounts": {
     "title": "Records by provider",
@@ -27,18 +27,33 @@
     "unknown": "Unknown provider"
   },
   "activeMedications": {
-    "title": "Active medications"
+    "title": "Recorded prescriptions"
   },
   "labTrend": {
     "title": "Recent lab trend",
     "aboveRange": "above reference range",
     "belowRange": "below reference range",
-    "picker": "Lab test"
+    "picker": "Lab test",
+    "unitUnknown": "Unit not recorded",
+    "series": "Lab trend — {unit}",
+    "results": "Lab results",
+    "date": "Date",
+    "value": "Result",
+    "unit": "Unit",
+    "referenceRange": "Reference range",
+    "status": "Range status",
+    "missing": "Result not recorded",
+    "withinRange": "within reference range"
   },
   "stats": {
-    "totalVisits": "Total visits",
-    "activeMedications": "Active medications",
+    "totalVisits": "Total entries",
+    "activeMedications": "Recorded prescriptions",
     "labTestsTracked": "Lab tests tracked",
     "dataQualityFlags": "Data quality notes"
+  },
+  "window": {
+    "from": "From date",
+    "to": "Through date",
+    "hint": "Leave dates empty for the full history. A series is limited to 5,000 rows; narrow the dates if requested."
   }
 }

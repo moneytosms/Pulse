@@ -11,7 +11,9 @@
     "title": "Patients who have given you access",
     "empty": "No patient has given you access yet.",
     "until": "Access until {date}",
-    "error": "Could not load your patients."
+    "error": "Could not load your patients.",
+    "loadMore": "Load more patients",
+    "retry": "Try again"
   },
   "form": {
     "title": "Open a patient record",

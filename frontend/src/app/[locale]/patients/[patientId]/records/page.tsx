@@ -94,6 +94,7 @@ export default function ClinicianPatientRecordsPage({
   const [typeFilter, setTypeFilter] = useState<EntryType | "">("");
   const [retryToken, setRetryToken] = useState(0);
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  const paginationRequest = useRef<AbortController | null>(null);
   const [role, setRole] = useState<Me["role"] | null>(null);
 
   useEffect(() => {
@@ -136,6 +137,7 @@ export default function ClinicianPatientRecordsPage({
         setState({ status: "error", message: errorMessage(err) });
       });
     return () => {
+      paginationRequest.current?.abort();
       active = false;
     };
     // errorMessage / router are stable for the page lifetime.
@@ -145,10 +147,14 @@ export default function ClinicianPatientRecordsPage({
   function loadMore() {
     if (state.status !== "ready" || !state.nextCursor) return;
     const cursor = state.nextCursor;
+    paginationRequest.current?.abort();
+    const controller = new AbortController();
+    paginationRequest.current = controller;
     setState({ ...state, loadingMore: true, loadMoreError: null });
     api
-      .get<Page<EntrySummary>>(`/patients/${patientId}/entries?${entriesQuery(typeFilter, cursor)}`)
+      .get<Page<EntrySummary>>(`/patients/${patientId}/entries?${entriesQuery(typeFilter, cursor)}`, { signal: controller.signal })
       .then((page) => {
+        if (controller.signal.aborted) return;
         setState((prev) =>
           prev.status === "ready"
             ? {
@@ -162,6 +168,7 @@ export default function ClinicianPatientRecordsPage({
         );
       })
       .catch((err) => {
+        if (controller.signal.aborted) return;
         setState((prev) =>
           prev.status === "ready"
             ? { ...prev, loadingMore: false, loadMoreError: errorMessage(err) }
@@ -189,7 +196,7 @@ export default function ClinicianPatientRecordsPage({
         <Label htmlFor={filterId}>{tTimeline("filter.label")}</Label>
         <Select
           value={typeFilter || ALL_TYPES}
-          onValueChange={(value) => setTypeFilter(value === ALL_TYPES ? "" : (value as EntryType))}
+          onValueChange={(value) => { paginationRequest.current?.abort(); setTypeFilter(value === ALL_TYPES ? "" : (value as EntryType)); }}
         >
           <SelectTrigger id={filterId} className="w-full">
             <SelectValue placeholder={tTimeline("filter.label")} />

@@ -6,6 +6,7 @@ unverified user signs in and is gated at the permission layer instead,
 so the frontend can render a "resend verification" screen.
 """
 
+import asyncio
 import os
 from uuid import UUID
 
@@ -14,9 +15,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.identity import IdentityProvider, VerificationOutcome
+from app.core.actor import Actor
 from app.core.authz import Role
 from app.core.errors import ErrorCode
 from app.core.exceptions import PulseError
+from app.core.rate_limit import check_limit
 from app.core.security import hash_password, verify_password
 from app.core.sessions import (
     create_session,
@@ -24,6 +27,7 @@ from app.core.sessions import (
     destroy_session,
     grant_step_up,
 )
+from app.modules.audit import service as audit_service
 from app.modules.users import service as users_service
 
 
@@ -62,7 +66,7 @@ async def register(
         user = await users_service.register_identity(
             session,
             email=email,
-            password_hash=hash_password(password),
+            password_hash=await asyncio.to_thread(hash_password, password),
             role=Role(role),
         )
     except IntegrityError as exc:
@@ -107,22 +111,68 @@ async def complete_verification(
 async def login(session: AsyncSession, redis: Redis, *, email: str, password: str) -> str:
     """Return a fresh session token. Raises INVALID_CREDENTIALS, generically."""
     email = _normalise_email(email)
+    await check_limit(redis, "login-account", email, 10, 60)
     user = await users_service.get_user_by_email(session, email)
-    if user is None or not verify_password(password, user.password_hash):
+    if user is None or not await asyncio.to_thread(verify_password, password, user.password_hash):
+        await audit_service.emit(
+            session,
+            actor=None,
+            action=audit_service.AuditAction.LOGIN_FAILURE,
+            resource_type="authentication",
+            resource_id=None,
+            patient_id=None,
+            outcome=audit_service.AuditOutcome.DENIED,
+        )
+        await session.commit()
         raise PulseError(
             ErrorCode.INVALID_CREDENTIALS,
             "Email or password is incorrect.",
             http_status=401,
         )
-    return await create_session(redis, user.id, user.role)
+    token = await create_session(redis, user.id, user.role)
+    try:
+        await audit_service.emit(
+            session,
+            actor=Actor(user_id=user.id, role=user.role),
+            action=audit_service.AuditAction.LOGIN_SUCCESS,
+            resource_type="authentication",
+            resource_id=None,
+            patient_id=None,
+            outcome=audit_service.AuditOutcome.SUCCESS,
+        )
+        await session.commit()
+    except Exception:
+        await destroy_session(redis, token)
+        raise
+    return token
 
 
-async def logout(redis: Redis, token: str) -> None:
+async def logout(session: AsyncSession, redis: Redis, token: str, actor: Actor) -> None:
     await destroy_session(redis, token)
+    await audit_service.emit(
+        session,
+        actor=actor,
+        action=audit_service.AuditAction.LOGOUT,
+        resource_type="authentication",
+        resource_id=None,
+        patient_id=None,
+        outcome=audit_service.AuditOutcome.SUCCESS,
+    )
+    await session.commit()
 
 
-async def logout_all(redis: Redis, user_id: UUID) -> None:
-    await destroy_all_sessions(redis, user_id)
+async def logout_all(session: AsyncSession, redis: Redis, actor: Actor) -> None:
+    await destroy_all_sessions(redis, actor.user_id)
+    await audit_service.emit(
+        session,
+        actor=actor,
+        action=audit_service.AuditAction.LOGOUT_ALL,
+        resource_type="authentication",
+        resource_id=None,
+        patient_id=None,
+        outcome=audit_service.AuditOutcome.SUCCESS,
+    )
+    await session.commit()
 
 
 async def step_up(
@@ -134,11 +184,32 @@ async def step_up(
     password: str,
 ) -> None:
     """Re-verify the password and mark this session step-up'd for a short window."""
+    await check_limit(redis, "step-up-account", str(user_id), 10, 60)
     user = await users_service.get_user(session, user_id)
-    if user is None or not verify_password(password, user.password_hash):
+    if user is None or not await asyncio.to_thread(verify_password, password, user.password_hash):
+        await audit_service.emit(
+            session,
+            actor=Actor(user_id=user.id, role=user.role) if user else None,
+            action=audit_service.AuditAction.STEP_UP_FAILURE,
+            resource_type="authentication",
+            resource_id=None,
+            patient_id=None,
+            outcome=audit_service.AuditOutcome.DENIED,
+        )
+        await session.commit()
         raise PulseError(
             ErrorCode.INVALID_CREDENTIALS,
             "Email or password is incorrect.",
             http_status=401,
         )
+    await audit_service.emit(
+        session,
+        actor=Actor(user_id=user.id, role=user.role),
+        action=audit_service.AuditAction.STEP_UP_SUCCESS,
+        resource_type="authentication",
+        resource_id=None,
+        patient_id=None,
+        outcome=audit_service.AuditOutcome.SUCCESS,
+    )
+    await session.commit()
     await grant_step_up(redis, token)

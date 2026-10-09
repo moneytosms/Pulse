@@ -13,14 +13,14 @@ Versions are pinned in [`docs/tech-stack.md`](docs/tech-stack.md), including the
 - **Runtime:** Python 3.13 (backend) · Node 24 LTS (frontend)
 - **Framework:** FastAPI 0.141 + SQLAlchemy 2.0 async · Next.js 16 App Router + React 19 + TypeScript 6
 - **Key deps:** PostgreSQL 18, Redis 8, Alembic, Pydantic 2.13, `pwdlib[argon2]`, next-intl 4, Tailwind 4, Radix UI
-- **Test:** `uv run pytest` · `npm test` — integration tests need Docker (real Postgres, testcontainers)
+- **Test:** `uv run pytest` · `npm run test:e2e` — integration tests need Docker (real Postgres, testcontainers)
 - **Lint:** `uv run ruff check .` + `uv run mypy .` · `npm run lint` + `npx tsc --noEmit`
 - **Format:** `uv run ruff format .` · `npx prettier --write`
 - **Build:** `docker compose build` · `npm run build`
 - **Deploy:** `docker compose up`. The demo target is a laptop; there is no staging environment.
 - **RTK wrappers:** confirmed via `rtk help`. Backend → `rtk pip` / `rtk ruff` / `rtk pytest` / `rtk mypy`; frontend → `rtk npm` / `rtk npx` / `rtk next`.
 
-The commands above are live as of Phase 1. `backend/` has 42 passing tests (real Postgres + Redis via testcontainers — Docker required); `frontend/` passes `tsc`, `eslint` and `next build`. `docker compose up` brings up the six-container stack, migrates, and seeds identity data on first boot.
+The commands above verify the current records/consent/demo implementation. Backend integration tests use real Postgres + Redis via testcontainers (Docker required). `docker compose up --build -d --wait` starts the six-service synthetic demo and preserves uploads in a named volume. See `docs/verification-and-operations.md` for verification and remaining scope.
 
 ## Canary
 

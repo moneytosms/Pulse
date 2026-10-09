@@ -10,12 +10,10 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import CursorResult, or_, select, update
+from sqlalchemy import CursorResult, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import ErrorCode
-from app.core.exceptions import PulseError
-from app.core.pagination import decode_cursor, encode_cursor
+from app.core.pagination import encode_cursor, unpack_cursor
 from app.modules.notifications.models import Notification, NotificationPreference
 from app.modules.notifications.schemas import NotificationChannel, NotificationType
 
@@ -27,14 +25,7 @@ def _pack_cursor(created_at: datetime, notification_id: UUID) -> str:
 
 
 def _unpack_cursor(cursor: str) -> tuple[datetime, UUID]:
-    raw = decode_cursor(cursor)
-    ts, sep, uid = raw.partition("|")
-    try:
-        if not sep:
-            raise ValueError("missing separator")
-        return datetime.fromisoformat(ts), UUID(uid)
-    except ValueError as exc:
-        raise PulseError(ErrorCode.VALIDATION_ERROR, "Invalid cursor.") from exc
+    return unpack_cursor(cursor)
 
 
 async def insert_notification(
@@ -43,7 +34,9 @@ async def insert_notification(
     type_: NotificationType,
     params: dict[str, Any],
 ) -> Notification:
-    row = Notification(user_id=user_id, type=type_, params=params)
+    row = Notification(
+        user_id=user_id, type=type_, params=params, created_at=func.clock_timestamp()
+    )
     session.add(row)
     await session.flush()
     return row
@@ -160,3 +153,16 @@ async def upsert_preference(
     session.add(row)
     await session.flush()
     return row
+
+
+async def digested_entry_view_count(session: AsyncSession, user_id: UUID) -> int:
+    """Committed counts already represented by this user's digest history."""
+    return int(
+        await session.scalar(
+            select(func.coalesce(func.sum(Notification.params["viewCount"].as_integer()), 0)).where(
+                Notification.user_id == user_id,
+                Notification.type == NotificationType.DAILY_DIGEST,
+            )
+        )
+        or 0
+    )

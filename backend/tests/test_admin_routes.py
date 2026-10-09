@@ -116,7 +116,7 @@ async def test_administrator_duplicate_review_queue_carries_no_clinical_content(
 
     resp = await client.get("/api/v1/admin/duplicate-review")
     assert resp.status_code == 200
-    body = resp.json()
+    body = resp.json()["items"]
     assert len(body) == 1
     item = body[0]
     assert set(item.keys()) == {"id", "patientA", "patientB", "score", "status"}
@@ -139,7 +139,7 @@ async def test_reversible_merges_list_survives_sessions_and_drops_reversed(
 ) -> None:
     await _insert_duplicate_pair_with_entry(app_database_url)
     await register_and_login(email="admin-merges@example.com", role="ADMINISTRATOR")
-    pair = (await client.get("/api/v1/admin/duplicate-review")).json()[0]
+    pair = (await client.get("/api/v1/admin/duplicate-review")).json()["items"][0]
     winner, loser = pair["patientA"], pair["patientB"]
     merged = await client.post(
         "/api/v1/admin/duplicate-review/merge",
@@ -152,7 +152,7 @@ async def test_reversible_merges_list_survives_sessions_and_drops_reversed(
     await register_and_login(email="admin-merges@example.com", role="ADMINISTRATOR")
     resp = await client.get("/api/v1/admin/merges")
     assert resp.status_code == 200
-    [row] = resp.json()
+    [row] = resp.json()["items"]
     assert row["id"] == merged.json()["id"]
     assert row["winnerName"] == winner["fullName"]
     assert row["loserName"] == loser["fullName"]
@@ -160,4 +160,27 @@ async def test_reversible_merges_list_survives_sessions_and_drops_reversed(
 
     reversed_resp = await client.post(f"/api/v1/admin/merges/{row['id']}/reverse")
     assert reversed_resp.status_code == 200
-    assert (await client.get("/api/v1/admin/merges")).json() == []
+    assert (await client.get("/api/v1/admin/merges")).json()["items"] == []
+
+
+async def test_admin_queue_keyset_pages_and_invalid_cursor(
+    client: AsyncClient, register_and_login: RegisterAndLogin, app_database_url: str
+) -> None:
+    for _ in range(3):
+        await _insert_duplicate_pair_with_entry(app_database_url)
+    await register_and_login(email="admin-pagination@example.com", role="ADMINISTRATOR")
+    seen: list[str] = []
+    cursor: str | None = None
+    for _ in range(3):
+        params = {"limit": "1"}
+        if cursor:
+            params["cursor"] = cursor
+        response = await client.get("/api/v1/admin/duplicate-review", params=params)
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["items"]) == 1
+        seen.append(body["items"][0]["id"])
+        cursor = body["nextCursor"]
+    assert len(set(seen)) == 3 and cursor is None
+    bad = await client.get("/api/v1/admin/duplicate-review", params={"cursor": "not-valid"})
+    assert bad.status_code == 422 and bad.json()["error"]["code"] == "VALIDATION_ERROR"

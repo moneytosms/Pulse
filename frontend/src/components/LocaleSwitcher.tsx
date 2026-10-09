@@ -56,8 +56,9 @@ export function LocaleSwitcher() {
           value={activeLocale}
           onValueChange={(locale) =>
             startTransition(() => {
+              if (document.querySelector('form[data-unsaved-changes="true"]') && !window.confirm(t("discardChanges"))) return;
               api.put("/users/me/locale", { locale }).catch(() => {});
-              router.replace(pathname, { locale });
+              router.replace(`${pathname}${window.location.search}${window.location.hash}`, { locale });
             })
           }
         >

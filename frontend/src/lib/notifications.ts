@@ -1,36 +1,6 @@
-// Notification wire types (issue #46 notification centre + preferences).
-//
-// Hand-mirrored from `backend/app/modules/notifications/schemas.py` — same
-// precedent as `lib/records.ts` / `lib/audit.ts` / `lib/consent.ts`: no
-// OpenAPI-to-TypeScript generation set up yet. Keep in sync with
-// `Notification` / `NotificationPreference` until a generator lands.
-
-export const NOTIFICATION_TYPES = [
-  "CONSENT_GRANTED",
-  "CONSENT_REVOKED",
-  "RECORD_UPLOADED",
-  "BREAK_GLASS_ACCESS",
-  "DAILY_DIGEST",
-] as const;
-export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
-
-export const NOTIFICATION_CHANNELS = ["EMAIL", "SMS", "IN_APP"] as const;
-export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
-
-export interface Notification {
-  id: string;
-  type: NotificationType;
-  title: string;
-  body: string;
-  readAt: string | null;
-  createdAt: string;
-}
-
-export interface NotificationPreference {
-  notificationType: NotificationType;
-  channel: NotificationChannel;
-  enabled: boolean;
-}
+import type { NotificationType } from "./generated/api";
+export { NotificationTypeValues as NOTIFICATION_TYPES, NotificationChannelValues as NOTIFICATION_CHANNELS } from "./generated/api";
+export type { NotificationType, NotificationChannel, Notification, NotificationPreference } from "./generated/api";
 
 /**
  * Mandatory types — never subject to a preference check, never shown in the

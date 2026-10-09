@@ -23,7 +23,7 @@ lint, backend.md).
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -31,9 +31,10 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.actor import Actor
+from app.core.authz import Role
 from app.core.errors import ErrorCode
 from app.core.exceptions import PulseError
-from app.core.middleware import get_request_id
+from app.core.middleware import get_request_context, get_request_id
 from app.core.pagination import Page
 from app.modules.audit import repository
 
@@ -78,7 +79,7 @@ def _not_found() -> PulseError:
 async def emit(
     session: AsyncSession,
     *,
-    actor: Actor,
+    actor: Actor | None,
     action: AuditAction,
     resource_type: str,
     resource_id: UUID | None,
@@ -87,35 +88,35 @@ async def emit(
     metadata: AuditMetadata | None = None,
     request_id: str | None = None,
 ) -> None:
-    """Write one `AuditEvent` and commit. `actor_role` is denormalised
-    from `actor.role` at write time (roles change; history must not).
-    Commits inline — matching `notifications/service.py`'s inline commits
-    after each repository write — so a caller mid-request never has to
-    remember to flush the audit trail itself. `request_id` defaults to the
-    one `RequestIdMiddleware` assigned to the current HTTP request."""
+    """Flush within the caller's transaction before its required commit."""
+    ip, user_agent = get_request_context()
     await repository.insert_event(
         session,
-        actor_user_id=actor.user_id,
-        actor_role=actor.role,
+        actor_user_id=actor.user_id if actor is not None else None,
+        actor_role=actor.role if actor is not None else None,
         action=action,
         resource_type=resource_type,
         resource_id=resource_id,
         patient_id=patient_id,
         outcome=outcome,
         request_id=request_id if request_id is not None else get_request_id(),
+        ip=ip,
+        user_agent=user_agent,
         event_metadata=metadata.to_dict() if metadata is not None else {},
     )
-    await session.commit()
 
 
-def _to_projection(row: repository.PatientAuditRow) -> AuditEventProjection:
+def _to_projection(
+    row: repository.PatientAuditRow, *, is_self: bool = False
+) -> AuditEventProjection:
     return AuditEventProjection(
         id=row.id,
+        is_self=is_self,
         occurred_at=row.occurred_at,
         actor_name=row.actor_email or "Unknown",
-        actor_role=row.actor_role.value,
+        actor_role=row.actor_role.value if row.actor_role is not None else "Unknown",
         provider_name=row.provider_name,
-        action=row.action.value,
+        action=row.action,
         entry_type=row.entry_type,
     )
 
@@ -127,18 +128,37 @@ async def list_for_patient(
     *,
     cursor: str | None = None,
     limit: int = 50,
+    action: AuditAction | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    actor_role: Role | None = None,
 ) -> Page[AuditEventProjection]:
-    """The signed-in Patient's own filtered projection. `patient_id` is
-    accepted (matching the route's `?patientId=`) only to be checked
-    against the actor's own Patient — never as a way to read someone
-    else's trail. A mismatch, or an actor who owns no Patient, is 404,
-    never 403 (clinical-safety.md)."""
+    """Read the signed-in patient's own current identity scope."""
     own = await users_service.get_own_patient_profile(session, actor)
     if own is None or (patient_id is not None and patient_id != own.id):
         raise _not_found()
+    if since and until and since >= until:
+        raise PulseError(
+            ErrorCode.VALIDATION_ERROR, "Date window must be ordered.", http_status=422
+        )
     rows, next_cursor = await repository.list_for_patient(
-        session, own.id, cursor=cursor, limit=limit
+        session,
+        own.id,
+        cursor=cursor,
+        limit=limit,
+        action=action,
+        since=since,
+        until=until,
+        actor_role=actor_role,
     )
-    return Page[AuditEventProjection](
-        items=[_to_projection(r) for r in rows], next_cursor=next_cursor
+    emails = await users_service.user_email_map(
+        session, list({row.actor_user_id for row in rows if row.actor_user_id})
     )
+    projections = [
+        _to_projection(
+            replace(row, actor_email=emails.get(row.actor_user_id) if row.actor_user_id else None),
+            is_self=row.actor_user_id == actor.user_id,
+        )
+        for row in rows
+    ]
+    return Page[AuditEventProjection](items=projections, next_cursor=next_cursor)

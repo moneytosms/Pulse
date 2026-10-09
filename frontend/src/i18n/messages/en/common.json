@@ -32,7 +32,8 @@
     "en": "English",
     "hi": "Hindi",
     "ta": "Tamil",
-    "ml": "Malayalam"
+    "ml": "Malayalam",
+    "discardChanges": "Changing language will discard unsaved changes or interrupt an upload. Continue?"
   },
   "actions": {
     "submit": "Submit",
@@ -54,6 +55,9 @@
     "signOut": "Sign out",
     "openMenu": "Open menu",
     "toggleTheme": "Toggle theme",
-    "account": "Account"
+    "account": "Account",
+    "signOutFailed": "Could not sign out. Try again before leaving this device.",
+    "retrySignOut": "Retry sign out",
+    "patientTasks": "Patient tasks"
   }
 }

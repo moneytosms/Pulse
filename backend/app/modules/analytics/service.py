@@ -23,7 +23,9 @@ from app.core.actor import Actor
 from app.core.authz import Role
 from app.core.errors import ErrorCode
 from app.core.exceptions import PulseError
+from app.core.transactions import transactional
 from app.modules.analytics.schemas import DataQualityFlag
+from app.modules.audit import service as audit_service
 from app.modules.records import service as records_service
 from app.modules.records.schemas import (
     LabTest,
@@ -60,11 +62,36 @@ def _is_abnormal(
     return False
 
 
+@transactional
 async def lab_trend(
-    session: AsyncSession, actor: Actor, patient_id: UUID, *, code_system: str, code: str
+    session: AsyncSession,
+    actor: Actor,
+    patient_id: UUID,
+    *,
+    code_system: str,
+    code: str,
+    from_date: date | None = None,
+    to_date: date | None = None,
 ) -> list[LabTrendPoint]:
+    _validate_window(from_date, to_date)
+    await records_service.authorize_patient_access(session, actor, patient_id)
+    await audit_service.emit(
+        session,
+        actor=actor,
+        action=audit_service.AuditAction.ANALYTICS_VIEWED,
+        resource_type="patient",
+        resource_id=patient_id,
+        patient_id=patient_id,
+        outcome=audit_service.AuditOutcome.SUCCESS,
+    )
     points = await records_service.lab_trend(
-        session, actor, patient_id, code_system=code_system, code=code
+        session,
+        actor,
+        patient_id,
+        code_system=code_system,
+        code=code,
+        from_date=from_date,
+        to_date=to_date,
     )
     return [
         p.model_copy(
@@ -80,26 +107,104 @@ async def lab_trend(
     ]
 
 
-async def lab_tests(session: AsyncSession, actor: Actor, patient_id: UUID) -> list[LabTest]:
-    return await records_service.lab_tests(session, actor, patient_id)
+@transactional
+async def lab_tests(
+    session: AsyncSession,
+    actor: Actor,
+    patient_id: UUID,
+    *,
+    from_date: date | None = None,
+    to_date: date | None = None,
+) -> list[LabTest]:
+    _validate_window(from_date, to_date)
+    await records_service.authorize_patient_access(session, actor, patient_id)
+    await audit_service.emit(
+        session,
+        actor=actor,
+        action=audit_service.AuditAction.ANALYTICS_VIEWED,
+        resource_type="patient",
+        resource_id=patient_id,
+        patient_id=patient_id,
+        outcome=audit_service.AuditOutcome.SUCCESS,
+    )
+    return await records_service.lab_tests(
+        session, actor, patient_id, from_date=from_date, to_date=to_date
+    )
 
 
+@transactional
 async def visit_frequency_by_month(
-    session: AsyncSession, actor: Actor, patient_id: UUID
+    session: AsyncSession,
+    actor: Actor,
+    patient_id: UUID,
+    *,
+    from_date: date | None = None,
+    to_date: date | None = None,
 ) -> list[MonthlyVisitCount]:
-    return await records_service.visit_frequency_by_month(session, actor, patient_id)
+    _validate_window(from_date, to_date)
+    await records_service.authorize_patient_access(session, actor, patient_id)
+    await audit_service.emit(
+        session,
+        actor=actor,
+        action=audit_service.AuditAction.ANALYTICS_VIEWED,
+        resource_type="patient",
+        resource_id=patient_id,
+        patient_id=patient_id,
+        outcome=audit_service.AuditOutcome.SUCCESS,
+    )
+    return await records_service.visit_frequency_by_month(
+        session, actor, patient_id, from_date=from_date, to_date=to_date
+    )
 
 
+@transactional
 async def active_medications(
-    session: AsyncSession, actor: Actor, patient_id: UUID
+    session: AsyncSession,
+    actor: Actor,
+    patient_id: UUID,
+    *,
+    from_date: date | None = None,
+    to_date: date | None = None,
 ) -> list[MedicationSummary]:
-    return await records_service.active_medications(session, actor, patient_id)
+    _validate_window(from_date, to_date)
+    await records_service.authorize_patient_access(session, actor, patient_id)
+    await audit_service.emit(
+        session,
+        actor=actor,
+        action=audit_service.AuditAction.ANALYTICS_VIEWED,
+        resource_type="patient",
+        resource_id=patient_id,
+        patient_id=patient_id,
+        outcome=audit_service.AuditOutcome.SUCCESS,
+    )
+    return await records_service.active_medications(
+        session, actor, patient_id, from_date=from_date, to_date=to_date
+    )
 
 
+@transactional
 async def provider_entry_counts(
-    session: AsyncSession, actor: Actor, patient_id: UUID
+    session: AsyncSession,
+    actor: Actor,
+    patient_id: UUID,
+    *,
+    from_date: date | None = None,
+    to_date: date | None = None,
 ) -> list[ProviderEntryCount]:
-    return await records_service.provider_entry_counts(session, actor, patient_id)
+    _validate_window(from_date, to_date)
+    await records_service.authorize_patient_access(session, actor, patient_id)
+    await audit_service.emit(
+        session,
+        actor=actor,
+        action=audit_service.AuditAction.ANALYTICS_VIEWED,
+        resource_type="patient",
+        resource_id=patient_id,
+        patient_id=patient_id,
+        outcome=audit_service.AuditOutcome.SUCCESS,
+    )
+    return await records_service.provider_entry_counts(
+        session, actor, patient_id, from_date=from_date, to_date=to_date
+    )
 
 
 def _implausible_dob(dob: date) -> bool:
@@ -164,3 +269,10 @@ async def data_quality_flags(
     if future_count > 0:
         flags.append(DataQualityFlag.FUTURE_DATED_ENTRY)
     return flags
+
+
+def _validate_window(from_date: date | None, to_date: date | None) -> None:
+    if from_date and to_date and from_date > to_date:
+        raise PulseError(
+            ErrorCode.VALIDATION_ERROR, "Date window must be ordered.", http_status=422
+        )

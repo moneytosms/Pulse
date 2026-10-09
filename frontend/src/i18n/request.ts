@@ -66,7 +66,7 @@ import mlNotifications from "./messages/ml/notifications.json";
 import mlProfile from "./messages/ml/profile.json";
 import mlTimeline from "./messages/ml/timeline.json";
 
-type Catalog = Record<string, unknown>;
+import { mergeCatalogs, pruneEmpty, type Catalog } from "./catalog";
 
 const CATALOGS: Record<string, Catalog> = {
   en: {
@@ -142,30 +142,6 @@ const CATALOGS: Record<string, Catalog> = {
 // invisible in dev and CI, which is the one thing the guard below exists to
 // prevent, so empty leaves are dropped before the catalog is handed over: they
 // then throw in dev/CI and fall back to English in production.
-function pruneEmpty(catalog: Catalog): Catalog {
-  const out: Catalog = {};
-  for (const [key, value] of Object.entries(catalog)) {
-    if (value && typeof value === "object" && !Array.isArray(value)) {
-      const nested = pruneEmpty(value as Catalog);
-      if (Object.keys(nested).length > 0) out[key] = nested;
-    } else if (value !== "") {
-      out[key] = value;
-    }
-  }
-  return out;
-}
-
-function mergeCatalogs(base: Catalog, override: Catalog): Catalog {
-  const out: Catalog = { ...base };
-  for (const [key, value] of Object.entries(override)) {
-    out[key] =
-      value && typeof value === "object" && !Array.isArray(value)
-        ? { ...(base[key] as object), ...(value as object) }
-        : value;
-  }
-  return out;
-}
-
 export default getRequestConfig(async ({ requestLocale }) => {
   const requested = await requestLocale;
   const locale = hasLocale(routing.locales, requested)

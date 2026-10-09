@@ -14,4 +14,4 @@ def test_entry_query_lint_passes() -> None:
         text=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "lint armed for Phase 2" in result.stdout
+    assert "no MedicalEntry reads outside its repository" in result.stdout

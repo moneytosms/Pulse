@@ -26,6 +26,40 @@ from httpx import AsyncClient
 _PDF = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
 
 
+async def test_actor_and_until_filters_do_not_leak_or_skip_pages(
+    client: AsyncClient, register_and_login: RegisterAndLogin, app_database_url: str
+) -> None:
+    await register_and_login(email="audit-ux-filter@example.com")
+    pid = await _patient_id(client)
+    for role, hour in [("CLINICIAN", 9), ("PATIENT", 10), ("CLINICIAN", 11), ("CLINICIAN", 12)]:
+        await ah.seed_event_for_patient(
+            app_database_url,
+            patient_id=pid,
+            actor_role=role,
+            occurred_at=datetime(2026, 10, 9, hour, tzinfo=UTC),
+        )
+    query = {
+        "actorRole": "CLINICIAN",
+        "since": "2026-10-09T00:00:00Z",
+        "until": "2026-10-09T12:00:00Z",
+        "limit": "1",
+    }
+    first = await client.get("/api/v1/audit-events", params=query)
+    assert first.status_code == 200
+    assert first.json()["items"][0]["occurredAt"].startswith("2026-10-09T11:")
+    assert first.json()["items"][0]["isSelf"] is False
+    query["cursor"] = first.json()["nextCursor"]
+    second = await client.get("/api/v1/audit-events", params=query)
+    assert second.json()["items"][0]["occurredAt"].startswith("2026-10-09T09:")
+    assert second.json()["nextCursor"] is None
+    await rh.insert_entry(
+        app_database_url, patient_id=pid, occurred_at=datetime(2026, 10, 1, tzinfo=UTC)
+    )
+    await client.get(f"/api/v1/patients/{pid}/entries")
+    self_events = await client.get("/api/v1/audit-events", params={"actorRole": "PATIENT"})
+    assert any(row["isSelf"] for row in self_events.json()["items"])
+
+
 @pytest_asyncio.fixture(autouse=True)
 async def _isolate(app_database_url: str) -> AsyncIterator[None]:
     yield
@@ -197,6 +231,7 @@ async def test_projection_never_exposes_raw_identifiers(
         "occurredAt",
         "actorName",
         "actorRole",
+        "isSelf",
         "providerName",
         "action",
         "entryType",
@@ -310,3 +345,55 @@ async def test_oversized_client_request_id_is_replaced_not_a_500(
     [row] = await ah.fetch_events_for_patient(app_database_url, pid)
     assert row["request_id"] == resp.headers["X-Request-Id"]
     assert len(row["request_id"]) <= 64
+
+
+async def test_emergency_filter_excludes_old_and_other_patients_events(
+    client: AsyncClient, register_and_login: RegisterAndLogin, app_database_url: str
+) -> None:
+    from datetime import timedelta
+
+    await register_and_login(email="audit-emergency-filter@example.com")
+    pid = await _patient_id(client)
+    other = await ah.insert_bare_patient(app_database_url)
+    now = datetime.now(UTC)
+    await ah.seed_event_for_patient(
+        app_database_url, patient_id=other, action="BREAK_GLASS_ACCESS", occurred_at=now
+    )
+    await ah.seed_event_for_patient(
+        app_database_url,
+        patient_id=pid,
+        action="BREAK_GLASS_ACCESS",
+        occurred_at=now - timedelta(hours=73),
+    )
+    params = {
+        "action": "BREAK_GLASS_ACCESS",
+        "since": (now - timedelta(hours=72)).isoformat(),
+        "limit": "1",
+    }
+    absent = await client.get("/api/v1/audit-events", params=params)
+    assert absent.status_code == 200
+    assert absent.json()["items"] == []
+    params["patientId"] = str(other)
+    denied = await client.get("/api/v1/audit-events", params=params)
+    assert denied.status_code == 404
+    del params["patientId"]
+
+    recent = await ah.seed_event_for_patient(
+        app_database_url,
+        patient_id=pid,
+        action="BREAK_GLASS_ACCESS",
+        occurred_at=now - timedelta(hours=1),
+    )
+    for _ in range(7):
+        await ah.seed_event_for_patient(app_database_url, patient_id=pid, occurred_at=now)
+    found = await client.get("/api/v1/audit-events", params=params)
+    assert found.status_code == 200
+    assert [item["id"] for item in found.json()["items"]] == [str(recent)]
+
+
+async def test_audit_filter_rejects_naive_timestamp(
+    client: AsyncClient, register_and_login: RegisterAndLogin
+) -> None:
+    await register_and_login(email="audit-naive-filter@example.com")
+    response = await client.get("/api/v1/audit-events", params={"since": "2026-10-01T00:00:00"})
+    assert response.status_code == 422

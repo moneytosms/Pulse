@@ -9,12 +9,15 @@ implementation; only the `@stub` fixtures behind them are throwaway.
 
 from __future__ import annotations
 
+import math
 from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
+from pydantic import AwareDatetime, Field, model_validator
+
 from app.core.schema import PulseSchema
-from app.modules.records.models import EntryType
+from app.modules.records.models import EntryType as EntryType
 
 
 class EntrySummary(PulseSchema):
@@ -26,9 +29,15 @@ class EntrySummary(PulseSchema):
     is_critical: bool = False
     superseded_by_id: UUID | None = None
     source_provider_id: UUID | None = None
+    provider_name: str | None = None
     # A short human label for the row — the diagnosis/lab/medication name, or
     # a note snippet. Recorded text, never translated.
     summary: str | None = None
+
+
+class EntryProvider(PulseSchema):
+    id: UUID
+    name: str
 
 
 class Document(PulseSchema):
@@ -75,22 +84,35 @@ class EntryCreate(PulseSchema):
     """
 
     entry_type: EntryType
-    occurred_at: datetime
+    occurred_at: AwareDatetime
     is_critical: bool = False
     source_provider_id: UUID | None = None
-    code_system: str | None = None
-    code: str | None = None
-    display_name: str | None = None
+    code_system: str | None = Field(default=None, max_length=255)
+    code: str | None = Field(default=None, max_length=64)
+    display_name: str | None = Field(default=None, max_length=512)
     value_numeric: float | None = None
-    value_text: str | None = None
-    unit: str | None = None
+    value_text: str | None = Field(default=None, max_length=2000)
+    unit: str | None = Field(default=None, max_length=64)
     reference_low: float | None = None
     reference_high: float | None = None
-    medication_name: str | None = None
-    dosage: str | None = None
-    frequency: str | None = None
-    route: str | None = None
-    text: str | None = None
+    medication_name: str | None = Field(default=None, max_length=512)
+    dosage: str | None = Field(default=None, max_length=255)
+    frequency: str | None = Field(default=None, max_length=255)
+    route: str | None = Field(default=None, max_length=128)
+    text: str | None = Field(default=None, max_length=100_000)
+
+    @model_validator(mode="after")
+    def validate_ranges(self) -> EntryCreate:
+        if (
+            self.reference_low is not None
+            and self.reference_high is not None
+            and self.reference_low > self.reference_high
+        ):
+            raise ValueError("Reference range must be ordered")
+        for value in (self.value_numeric, self.reference_low, self.reference_high):
+            if value is not None and not math.isfinite(value):
+                raise ValueError("Numeric values must be finite")
+        return self
 
 
 class DocumentCreate(PulseSchema):

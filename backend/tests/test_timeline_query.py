@@ -142,12 +142,109 @@ async def test_entry_type_filter_narrows_the_timeline(
     assert kinds == {"LAB_REPORT"}
 
 
-async def test_a_malformed_cursor_is_a_coded_400_not_a_500(
+async def test_a_malformed_cursor_is_a_coded_422_not_a_500(
     client: AsyncClient, register_and_login: RegisterAndLogin
 ) -> None:
     await register_and_login(email="tl-badcursor@example.com")
     pid = await _patient_id(client)
     # Valid base64, nonsense payload — must not reach an uncaught fromisoformat.
     resp = await client.get(f"/api/v1/patients/{pid}/entries?cursor=eHl6")
-    assert resp.status_code == 400
+    assert resp.status_code == 422
     assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+async def test_search_and_dates_filter_before_pagination_without_audit_content(
+    client: AsyncClient, register_and_login: RegisterAndLogin, app_database_url: str
+) -> None:
+    import audit_helpers as ah
+
+    await register_and_login(email="tl-search@example.com")
+    pid = await _patient_id(client)
+    for year, note in [
+        (2024, "Matching sensitive text"),
+        (2025, "Other note"),
+        (2025, "Matching sensitive text"),
+        (2025, "Matching sensitive text"),
+    ]:
+        await rh.insert_entry(
+            app_database_url,
+            patient_id=pid,
+            occurred_at=datetime(year, 3, 1, tzinfo=UTC),
+            note_text=note,
+        )
+    params = {
+        "q": "matching sensitive",
+        "fromDate": "2025-01-01",
+        "toDate": "2025-12-31",
+        "limit": "1",
+    }
+    first = await client.get(f"/api/v1/patients/{pid}/entries", params=params)
+    assert first.status_code == 200
+    assert len(first.json()["items"]) == 1
+    assert first.json()["nextCursor"]
+    params["cursor"] = first.json()["nextCursor"]
+    second = await client.get(f"/api/v1/patients/{pid}/entries", params=params)
+    assert second.status_code == 200
+    assert len(second.json()["items"]) == 1
+    assert second.json()["nextCursor"] is None
+    assert first.json()["items"][0]["id"] != second.json()["items"][0]["id"]
+    assert "sensitive" not in str(await ah.fetch_events_for_patient(app_database_url, pid)).lower()
+    await register_and_login(email="tl-search-denied@example.com", role="CLINICIAN")
+    denied = await client.get(f"/api/v1/patients/{pid}/entries", params=params)
+    assert denied.status_code == 404
+    options = await client.get(f"/api/v1/patients/{pid}/entry-providers")
+    assert options.status_code == 404
+
+
+async def test_search_window_rejects_reversed_dates(
+    client: AsyncClient, register_and_login: RegisterAndLogin
+) -> None:
+    await register_and_login(email="tl-search-window@example.com")
+    pid = await _patient_id(client)
+    response = await client.get(
+        f"/api/v1/patients/{pid}/entries", params={"fromDate": "2025-12-31", "toDate": "2025-01-01"}
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+async def test_provider_choices_and_summary_names_follow_actor_access(
+    client: AsyncClient, register_and_login: RegisterAndLogin, app_database_url: str
+) -> None:
+    await register_and_login(email="tl-provider-patient@example.com")
+    pid = await _patient_id(client)
+    await register_and_login(email="tl-provider-staff-a@example.com", role="PROVIDER_STAFF")
+    first_provider = await rh.seed_provider_staff(
+        app_database_url,
+        user_email="tl-provider-staff-a@example.com",
+        provider_name="Synthetic Clinic A",
+    )
+    await register_and_login(email="tl-provider-staff-b@example.com", role="PROVIDER_STAFF")
+    second_provider = await rh.seed_provider_staff(
+        app_database_url,
+        user_email="tl-provider-staff-b@example.com",
+        provider_name="Synthetic Clinic B",
+    )
+    for provider in [first_provider, second_provider]:
+        await rh.insert_entry(
+            app_database_url,
+            patient_id=pid,
+            source_provider_id=provider,
+            occurred_at=datetime(2025, 6, 1, tzinfo=UTC),
+        )
+    # Staff B must not discover Provider A from another Provider's entries.
+    options = await client.get(f"/api/v1/patients/{pid}/entry-providers")
+    assert options.status_code == 200
+    assert options.json() == [{"id": str(second_provider), "name": "Synthetic Clinic B"}]
+    denied_filter = await client.get(
+        f"/api/v1/patients/{pid}/entries", params={"providerId": str(first_provider)}
+    )
+    assert denied_filter.status_code == 200
+    assert denied_filter.json()["items"] == []
+    await register_and_login(email="tl-provider-patient@example.com")
+    own = await client.get(
+        f"/api/v1/patients/{pid}/entries", params={"providerId": str(first_provider)}
+    )
+    assert own.status_code == 200
+    assert len(own.json()["items"]) == 1
+    assert own.json()["items"][0]["providerName"] == "Synthetic Clinic A"

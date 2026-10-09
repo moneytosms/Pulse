@@ -8,13 +8,15 @@ final, wired to the real service in P3.6 (#42). `BreakGlassRequest` /
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import Field, field_validator
+from pydantic import AwareDatetime, Field, field_validator, model_validator
 
 from app.core.schema import PulseSchema
+from app.modules.records.schemas import EntryType
 
 
 class ConsentPurpose(StrEnum):
@@ -34,13 +36,13 @@ class Consent(PulseSchema):
     patient_id: UUID
     grantee_user_id: UUID
     grantee_name: str | None = None
-    entry_types: list[str] | None = None
+    entry_types: list[EntryType] | None = None
     from_date: date | None = None
     to_date: date | None = None
     purpose: ConsentPurpose
-    purpose_text: str | None = None
+    purpose_text: str | None = Field(default=None, max_length=500)
     status: ConsentStatus
-    expires_at: datetime
+    expires_at: AwareDatetime
     granted_at: datetime
     revoked_at: datetime | None = None
     revocation_reason: str | None = None
@@ -48,16 +50,26 @@ class Consent(PulseSchema):
 
 class ConsentCreate(PulseSchema):
     grantee_user_id: UUID
-    entry_types: list[str] | None = None
+    entry_types: list[EntryType] | None = None
     from_date: date | None = None
     to_date: date | None = None
     purpose: ConsentPurpose
-    purpose_text: str | None = None
-    expires_at: datetime
+    purpose_text: str | None = Field(default=None, max_length=500)
+    expires_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def validate_scope(self) -> ConsentCreate:
+        if self.from_date and self.to_date and self.from_date > self.to_date:
+            raise ValueError("Date window must be ordered")
+        if self.entry_types == []:
+            raise ValueError("Choose at least one entry type or all types")
+        if self.purpose is ConsentPurpose.OTHER and not (self.purpose_text or "").strip():
+            raise ValueError("Other purpose requires an explanation")
+        return self
 
 
 class RevocationRequest(PulseSchema):
-    reason: str | None = None
+    reason: str | None = Field(default=None, max_length=500)
 
 
 class BreakGlassRequest(PulseSchema):
@@ -77,7 +89,7 @@ class BreakGlassGrant(PulseSchema):
     clinician_user_id: UUID
     justification: str
     granted_at: datetime
-    expires_at: datetime
+    expires_at: AwareDatetime
 
 
 class ConsentedPatient(PulseSchema):
@@ -86,7 +98,7 @@ class ConsentedPatient(PulseSchema):
 
     patient_id: UUID
     full_name: str
-    expires_at: datetime
+    expires_at: AwareDatetime
 
 
 class ClinicianLookup(PulseSchema):
@@ -95,3 +107,14 @@ class ClinicianLookup(PulseSchema):
 
     user_id: UUID
     email: str
+
+
+@dataclass(frozen=True)
+class LivePermission:
+    """Immutable scope projection at the consent module's read interface."""
+
+    id: UUID
+    entry_types: list[str] | None
+    from_date: date | None
+    to_date: date | None
+    expires_at: datetime

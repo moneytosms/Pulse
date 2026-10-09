@@ -84,8 +84,8 @@ async def test_duplicate_review_queue_returns_identity_and_counts_never_entry_co
     actor = Actor(user_id=admin.id, role=Role.ADMINISTRATOR)
 
     queue = await admin_service.duplicate_review_queue(db_session, actor)
-    assert len(queue) == 1
-    item = queue[0]
+    assert len(queue.items) == 1
+    item = queue.items[0]
 
     # Identity + counts only.
     dumped = item.model_dump(by_alias=False)

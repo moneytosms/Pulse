@@ -3,7 +3,14 @@
 import { use, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { CircleAlertIcon, FlaskConicalIcon, NotebookPenIcon, PillIcon, StethoscopeIcon, SyringeIcon } from "lucide-react";
+import {
+  CircleAlertIcon,
+  FlaskConicalIcon,
+  NotebookPenIcon,
+  PillIcon,
+  StethoscopeIcon,
+  SyringeIcon,
+} from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Breadcrumb,
@@ -14,8 +21,12 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { ClinicalText } from "@/components/ClinicalText";
+import { DocumentAttachmentForm } from "@/components/DocumentAttachmentForm";
+import { EntryStatus } from "@/components/EntryStatus";
 import { DocumentViewer } from "@/components/DocumentViewer";
 import { Link, useRouter } from "@/i18n/navigation";
+import type { Me } from "@/lib/auth";
+import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
 import { useApiErrorMessage } from "@/lib/errors";
 import { formatDate } from "@/lib/format";
@@ -35,9 +46,12 @@ const ENTRY_ICONS: Record<EntryType, typeof StethoscopeIcon> = {
 };
 
 function labFlag(entry: EntryDetail): "high" | "low" | null {
-  if (entry.entryType !== "LAB_REPORT" || entry.valueNumeric == null) return null;
-  if (entry.referenceHigh != null && entry.valueNumeric > entry.referenceHigh) return "high";
-  if (entry.referenceLow != null && entry.valueNumeric < entry.referenceLow) return "low";
+  if (entry.entryType !== "LAB_REPORT" || entry.valueNumeric == null)
+    return null;
+  if (entry.referenceHigh != null && entry.valueNumeric > entry.referenceHigh)
+    return "high";
+  if (entry.referenceLow != null && entry.valueNumeric < entry.referenceLow)
+    return "low";
   return null;
 }
 
@@ -69,7 +83,25 @@ export default function ClinicianEntryDetailPage({
   const tClinician = useTranslations("clinicianRecords");
   const errorMessage = useApiErrorMessage();
   const router = useRouter();
+  const [canCorrect, setCanCorrect] = useState(false);
+  const tEntry = useTranslations("entry");
   const [state, setState] = useState<LoadState>({ status: "loading" });
+
+  useEffect(() => {
+    let active = true;
+    api
+      .get<Me>("/auth/me")
+      .then((me) => {
+        if (active)
+          setCanCorrect(me.role === "PROVIDER_STAFF" && me.emailVerified);
+      })
+      .catch(() => {
+        if (active) setCanCorrect(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -79,11 +111,19 @@ export default function ClinicianEntryDetailPage({
     api
       .get<EntryDetail>(`/entries/${entryId}`)
       .then((entry) => {
-        if (active) setState({ status: "ready", entry });
+        if (!active) return;
+        if (entry.patientId.toLowerCase() !== patientId.toLowerCase()) {
+          setState({ status: "notFound" });
+          return;
+        }
+        setState({ status: "ready", entry });
       })
       .catch((err) => {
         if (!active) return;
-        if (err instanceof ApiError && (err.status === 401 || err.code === "SESSION_EXPIRED")) {
+        if (
+          err instanceof ApiError &&
+          (err.status === 401 || err.code === "SESSION_EXPIRED")
+        ) {
           router.replace("/login");
           return;
         }
@@ -98,7 +138,7 @@ export default function ClinicianEntryDetailPage({
     };
     // errorMessage / router are stable for the page lifetime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entryId]);
+  }, [entryId, patientId]);
 
   return (
     <section className="space-y-8 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-300">
@@ -106,21 +146,27 @@ export default function ClinicianEntryDetailPage({
         <BreadcrumbList>
           <BreadcrumbItem>
             <BreadcrumbLink asChild>
-              <Link href={`/patients/${patientId}/records`}>{tClinician("detail.back")}</Link>
+              <Link href={`/patients/${patientId}/records`}>
+                {tClinician("detail.back")}
+              </Link>
             </BreadcrumbLink>
           </BreadcrumbItem>
           {state.status === "ready" && (
             <>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
-                <BreadcrumbPage>{t(`entryTypes.${state.entry.entryType}`)}</BreadcrumbPage>
+                <BreadcrumbPage>
+                  {t(`entryTypes.${state.entry.entryType}`)}
+                </BreadcrumbPage>
               </BreadcrumbItem>
             </>
           )}
         </BreadcrumbList>
       </Breadcrumb>
 
-      {state.status === "loading" && <p className="text-sm text-muted-foreground">{t("loading")}</p>}
+      {state.status === "loading" && (
+        <p className="text-sm text-muted-foreground">{t("loading")}</p>
+      )}
 
       {state.status === "notFound" && (
         <Alert>
@@ -138,7 +184,39 @@ export default function ClinicianEntryDetailPage({
         </Alert>
       )}
 
-      {state.status === "ready" && <EntryDetailView entry={state.entry} patientId={patientId} />}
+      {state.status === "ready" &&
+        canCorrect &&
+        !state.entry.supersededById && (
+          <Button asChild variant="outline">
+            <Link
+              href={`/timeline/new?patientId=${patientId}&corrects=${entryId}`}
+            >
+              {tEntry("correction.cta")}
+            </Link>
+          </Button>
+        )}
+      {state.status === "ready" &&
+        canCorrect &&
+        !state.entry.supersededById && (
+          <DocumentAttachmentForm
+            patientId={state.entry.patientId}
+            entryId={state.entry.id}
+            onAttached={(doc) =>
+              setState((prev) =>
+                prev.status === "ready" && prev.entry.id === doc.entryId
+                  ? {
+                      ...prev,
+                      entry: {
+                        ...prev.entry,
+                        documents: [...prev.entry.documents, doc],
+                      },
+                    }
+                  : prev,
+              )
+            }
+          />
+        )}
+      {state.status === "ready" && <EntryDetailView entry={state.entry} />}
     </section>
   );
 }
@@ -152,14 +230,24 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function EntryDetailView({ entry, patientId }: { entry: EntryDetail; patientId: string }) {
+function EntryDetailView({ entry }: { entry: EntryDetail }) {
   const t = useTranslations("timeline");
   const Icon = ENTRY_ICONS[entry.entryType];
   const f = t.raw("detail.fields") as Record<string, string>;
 
   const rows: Array<[string, ReactNode]> = [
-    [f.occurredAt, <span key="occurredAt" className="tabular-nums">{formatDate(entry.occurredAt)}</span>],
-    [f.recordedAt, <span key="recordedAt" className="tabular-nums">{formatDate(entry.recordedAt)}</span>],
+    [
+      f.occurredAt,
+      <span key="occurredAt" className="tabular-nums">
+        {formatDate(entry.occurredAt)}
+      </span>,
+    ],
+    [
+      f.recordedAt,
+      <span key="recordedAt" className="tabular-nums">
+        {formatDate(entry.recordedAt)}
+      </span>,
+    ],
   ];
 
   if (entry.code || entry.displayName) {
@@ -172,7 +260,8 @@ function EntryDetailView({ entry, patientId }: { entry: EntryDetail; patientId: 
     ]);
   }
   if (entry.entryType === "LAB_REPORT") {
-    const value = entry.valueNumeric != null ? String(entry.valueNumeric) : entry.valueText;
+    const value =
+      entry.valueNumeric != null ? String(entry.valueNumeric) : entry.valueText;
     const flag = labFlag(entry);
     rows.push([
       f.value,
@@ -187,17 +276,32 @@ function EntryDetailView({ entry, patientId }: { entry: EntryDetail; patientId: 
       rows.push([
         f.referenceRange,
         <ClinicalText key="range">
-          {entry.referenceLow ?? "—"} – {entry.referenceHigh ?? "—"} {entry.unit ?? ""}
+          {entry.referenceLow ?? "—"} – {entry.referenceHigh ?? "—"}{" "}
+          {entry.unit ?? ""}
         </ClinicalText>,
       ]);
     }
   }
   if (entry.entryType === "PRESCRIPTION") {
-    rows.push([f.medication, <ClinicalText key="med">{entry.medicationName ?? "—"}</ClinicalText>]);
-    if (entry.dosage) rows.push([f.dosage, <ClinicalText key="dosage">{entry.dosage}</ClinicalText>]);
+    rows.push([
+      f.medication,
+      <ClinicalText key="med">{entry.medicationName ?? "—"}</ClinicalText>,
+    ]);
+    if (entry.dosage)
+      rows.push([
+        f.dosage,
+        <ClinicalText key="dosage">{entry.dosage}</ClinicalText>,
+      ]);
     if (entry.frequency)
-      rows.push([f.frequency, <ClinicalText key="freq">{entry.frequency}</ClinicalText>]);
-    if (entry.route) rows.push([f.route, <ClinicalText key="route">{entry.route}</ClinicalText>]);
+      rows.push([
+        f.frequency,
+        <ClinicalText key="freq">{entry.frequency}</ClinicalText>,
+      ]);
+    if (entry.route)
+      rows.push([
+        f.route,
+        <ClinicalText key="route">{entry.route}</ClinicalText>,
+      ]);
   }
   if (entry.entryType === "CLINICAL_NOTE" && entry.text) {
     rows.push([f.note, <ClinicalText key="note">{entry.text}</ClinicalText>]);
@@ -214,21 +318,10 @@ function EntryDetailView({ entry, patientId }: { entry: EntryDetail; patientId: 
         </h1>
       </div>
 
-      {entry.supersedesId && (
-        <Alert>
-          <CircleAlertIcon />
-          <AlertTitle>{t("detail.title")}</AlertTitle>
-          <AlertDescription>
-            <span>{t("detail.correctsNotice")}</span>{" "}
-            <Link
-              href={`/patients/${patientId}/records/${entry.supersedesId}`}
-              className="font-medium text-primary underline-offset-4 hover:underline"
-            >
-              {t("detail.viewPrevious")}
-            </Link>
-          </AlertDescription>
-        </Alert>
-      )}
+      <EntryStatus
+        entry={entry}
+        hrefPrefix={`/patients/${entry.patientId}/records`}
+      />
 
       <dl className="divide-y divide-border rounded-xl border bg-card text-card-foreground">
         {rows.map(([label, value]) => (
@@ -240,7 +333,9 @@ function EntryDetailView({ entry, patientId }: { entry: EntryDetail; patientId: 
 
       {entry.documents.length > 0 && (
         <div className="space-y-2">
-          <h2 className="text-sm font-semibold text-muted-foreground">{f.documents}</h2>
+          <h2 className="text-sm font-semibold text-muted-foreground">
+            {f.documents}
+          </h2>
           <ul className="space-y-2">
             {entry.documents.map((doc) => (
               <DocumentViewer key={doc.id} doc={doc} />

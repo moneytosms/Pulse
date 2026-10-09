@@ -31,6 +31,7 @@ services:
       # Read by the entrypoint's seed loader on first boot; kept out of the
       # image so a regenerate does not force a rebuild. clinical/ is Phase 2.
       - ./seed/data:/seed/data:ro
+      - pulse_uploads:/data/uploads
     environment:
       DATABASE_URL: postgresql+asyncpg://pulse_app:pulse_app@postgres:5432/pulse
       REDIS_URL: redis://redis:6379/0
@@ -51,7 +52,7 @@ services:
         condition: service_healthy
     healthcheck:
       # Healthy only once entrypoint migrations + seed finished and uvicorn is serving.
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/ready')"]
       interval: 5s
       timeout: 5s
       retries: 30
@@ -86,3 +87,4 @@ services:
 
 volumes:
   pulse_pgdata:
+  pulse_uploads:

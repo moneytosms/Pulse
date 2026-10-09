@@ -18,6 +18,7 @@ user" until a dedicated marker is needed.
 Every route declares `public()` or `requires(...)` in its `dependencies=`.
 """
 
+import os
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
@@ -36,6 +37,7 @@ from app.modules.auth.dependencies import (
     get_identity_provider,
     public,
     requires,
+    throttled,
 )
 from app.modules.auth.schemas import (
     LoginRequest,
@@ -66,14 +68,14 @@ def _set_session_cookie(response: Response, token: str) -> None:
         path="/",
         httponly=True,
         samesite="lax",
-        secure=False,
+        secure=os.environ.get("PULSE_SECURE_COOKIES") == "1",
     )
 
 
 @router.post(
     "/register",
     status_code=status.HTTP_201_CREATED,
-    dependencies=[public()],
+    dependencies=[public(), throttled("register", limit=20, window=3600)],
 )
 async def register(body: RegisterRequest, session: SessionDep, idp: IdpDep) -> RegisterResponse:
     user_id = await service.register(
@@ -90,7 +92,7 @@ async def register(body: RegisterRequest, session: SessionDep, idp: IdpDep) -> R
 @router.post(
     "/verify/resend",
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[public()],
+    dependencies=[public(), throttled("resend", limit=20, window=3600)],
 )
 async def resend_verification(
     body: ResendVerificationRequest, session: SessionDep, idp: IdpDep
@@ -99,7 +101,7 @@ async def resend_verification(
     return {}
 
 
-@router.post("/verify", dependencies=[public()])
+@router.post("/verify", dependencies=[public(), throttled("verify", limit=30)])
 async def verify(body: VerifyRequest, session: SessionDep, idp: IdpDep) -> dict[str, str]:
     await service.complete_verification(
         session, idp, challenge_id=body.challenge_id, token=body.token
@@ -107,7 +109,7 @@ async def verify(body: VerifyRequest, session: SessionDep, idp: IdpDep) -> dict[
     return {}
 
 
-@router.post("/login", dependencies=[public()])
+@router.post("/login", dependencies=[public(), throttled("login", limit=60)])
 async def login(
     body: LoginRequest, response: Response, session: SessionDep, redis: RedisDep
 ) -> dict[str, str]:
@@ -121,8 +123,10 @@ async def login(
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[requires(Permission.USER_CREDENTIALS_CHANGE, verified=False)],
 )
-async def logout(response: Response, ctx: CurrentUser, redis: RedisDep) -> None:
-    await service.logout(redis, ctx.session_token)
+async def logout(
+    response: Response, ctx: CurrentUser, redis: RedisDep, session: SessionDep
+) -> None:
+    await service.logout(session, redis, ctx.session_token, ctx.actor)
     response.delete_cookie(SESSION_COOKIE, path="/")
 
 
@@ -131,8 +135,10 @@ async def logout(response: Response, ctx: CurrentUser, redis: RedisDep) -> None:
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[requires(Permission.USER_CREDENTIALS_CHANGE, verified=False)],
 )
-async def logout_all(response: Response, ctx: CurrentUser, redis: RedisDep) -> None:
-    await service.logout_all(redis, ctx.user_id)
+async def logout_all(
+    response: Response, ctx: CurrentUser, redis: RedisDep, session: SessionDep
+) -> None:
+    await service.logout_all(session, redis, ctx.actor)
     response.delete_cookie(SESSION_COOKIE, path="/")
 
 

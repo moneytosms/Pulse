@@ -39,7 +39,10 @@ const FILED_ENTRY_SUMMARY = {
   summary: "Type 2 diabetes mellitus",
 };
 
-function consentFixture(status: "ACTIVE" | "REVOKED", revokedAt: string | null = null) {
+function consentFixture(
+  status: "ACTIVE" | "REVOKED",
+  revokedAt: string | null = null,
+) {
   return {
     id: CONSENT_ID,
     patientId: PATIENT_ID,
@@ -61,6 +64,7 @@ function consentFixture(status: "ACTIVE" | "REVOKED", revokedAt: string | null =
 test("full demo spine: signup, upload, grant, clinician read, audit, revoke, lockout", async ({
   page,
 }) => {
+  test.slow(); // Eight navigation and form steps against the development server.
   let consentStatus: "NONE" | "ACTIVE" | "REVOKED" = "NONE";
   // The mock can't tell "patient viewing their own timeline" apart from
   // "clinician viewing the same patient's record" by URL alone — both hit
@@ -83,23 +87,40 @@ test("full demo spine: signup, upload, grant, clinician read, audit, revoke, loc
         body: JSON.stringify(body),
       });
 
+    if (url.pathname.endsWith("/auth/me"))
+      return json(200, {
+        userId: "u-staff",
+        role: "PROVIDER_STAFF",
+        email: "staff@example.com",
+        emailVerified: true,
+      });
+
     // --- Signup ---
     if (url.pathname.endsWith("/auth/register") && req.method() === "POST") {
       return json(201, { userId: "u-priya" });
     }
 
     // --- Identity ---
-    if (url.pathname.endsWith("/patients/me")) return json(200, PATIENT_PROFILE);
+    if (url.pathname.endsWith("/patients/me"))
+      return json(200, PATIENT_PROFILE);
 
     // --- Upload (P2 entry filing) ---
-    if (url.pathname === `/api/v1/patients/${PATIENT_ID}/entries` && req.method() === "POST") {
+    if (
+      url.pathname === `/api/v1/patients/${PATIENT_ID}/entries` &&
+      req.method() === "POST"
+    ) {
       return json(201, { id: ENTRY_ID });
     }
-    if (url.pathname === `/api/v1/patients/${PATIENT_ID}/entries` && req.method() === "GET") {
+    if (
+      url.pathname === `/api/v1/patients/${PATIENT_ID}/entries` &&
+      req.method() === "GET"
+    ) {
       // Clinician read is consent-gated (accessible_entries); the patient's
       // own timeline read is not.
       if (asClinician && consentStatus !== "ACTIVE") {
-        return json(404, { error: { code: "NOT_FOUND", message: "not found" } });
+        return json(404, {
+          error: { code: "NOT_FOUND", message: "not found" },
+        });
       }
       return json(200, { items: [FILED_ENTRY_SUMMARY], nextCursor: null });
     }
@@ -113,18 +134,28 @@ test("full demo spine: signup, upload, grant, clinician read, audit, revoke, loc
     if (url.pathname === "/api/v1/auth/step-up" && req.method() === "POST") {
       const { password } = req.postDataJSON() as { password: string };
       if (password !== "correct horse battery staple") {
-        return json(401, { error: { code: "INVALID_CREDENTIALS", message: "bad password" } });
+        return json(401, {
+          error: { code: "INVALID_CREDENTIALS", message: "bad password" },
+        });
       }
       steppedUp = true;
       return json(200, {});
     }
-    if (url.pathname === "/api/v1/consents" && req.method() === "POST" && !steppedUp) {
-      return json(403, { error: { code: "STEP_UP_REQUIRED", message: "step up" } });
+    if (
+      url.pathname === "/api/v1/consents" &&
+      req.method() === "POST" &&
+      !steppedUp
+    ) {
+      return json(403, {
+        error: { code: "STEP_UP_REQUIRED", message: "step up" },
+      });
     }
     if (url.pathname === "/api/v1/consents" && req.method() === "POST") {
       const body = req.postDataJSON() as { granteeUserId: string };
       if (body.granteeUserId !== CLINICIAN_USER_ID) {
-        return json(422, { error: { code: "VALIDATION_ERROR", message: "bad grantee" } });
+        return json(422, {
+          error: { code: "VALIDATION_ERROR", message: "bad grantee" },
+        });
       }
     }
     if (url.pathname === "/api/v1/consents" && req.method() === "POST") {
@@ -132,10 +163,21 @@ test("full demo spine: signup, upload, grant, clinician read, audit, revoke, loc
       return json(201, consentFixture("ACTIVE"));
     }
     if (url.pathname === "/api/v1/consents" && req.method() === "GET") {
-      const items = consentStatus === "NONE" ? [] : [consentFixture(consentStatus === "REVOKED" ? "REVOKED" : "ACTIVE", consentStatus === "REVOKED" ? "2026-08-03T00:00:00Z" : null)];
+      const items =
+        consentStatus === "NONE"
+          ? []
+          : [
+              consentFixture(
+                consentStatus === "REVOKED" ? "REVOKED" : "ACTIVE",
+                consentStatus === "REVOKED" ? "2026-08-03T00:00:00Z" : null,
+              ),
+            ];
       return json(200, { items, nextCursor: null });
     }
-    if (url.pathname === `/api/v1/consents/${CONSENT_ID}/revocation` && req.method() === "POST") {
+    if (
+      url.pathname === `/api/v1/consents/${CONSENT_ID}/revocation` &&
+      req.method() === "POST"
+    ) {
       consentStatus = "REVOKED";
       return json(200, consentFixture("REVOKED", "2026-08-03T00:00:00Z"));
     }
@@ -190,7 +232,9 @@ test("full demo spine: signup, upload, grant, clinician read, audit, revoke, loc
 
   // 3. Timeline shows the filed entry
   await page.goto("/en/timeline");
-  await expect(page.getByRole("heading", { name: "Your timeline" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Your timeline" }),
+  ).toBeVisible();
   await expect(page.getByText("Type 2 diabetes mellitus")).toBeVisible();
 
   // 4. Grant consent to the clinician
@@ -199,29 +243,50 @@ test("full demo spine: signup, upload, grant, clinician read, audit, revoke, loc
   await page.getByRole("combobox", { name: "Purpose" }).click();
   await page.getByRole("option", { name: "Treatment" }).click();
   await page.locator('input[type="datetime-local"]').fill("2027-01-01T00:00");
-  await page.getByLabel("Confirm with your password").fill("wrong password");
-  await page.getByRole("button", { name: "Grant access" }).click();
-  await expect(page.getByText("No clinician is registered with that email.")).toBeVisible();
+  await page
+    .getByRole("radio", { name: "All entry types", exact: true })
+    .check();
+  await page
+    .getByRole("button", { name: "Review access", exact: true })
+    .click();
+  await expect(
+    page.getByText("No clinician is registered with that email."),
+  ).toBeVisible();
 
   await page.getByLabel("Clinician email").fill("fathima@example.com");
+  await page
+    .getByRole("button", { name: "Review access", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Review before sharing" }),
+  ).toBeVisible();
+  await page.getByLabel("Confirm with your password").fill("wrong password");
   await page.getByRole("button", { name: "Grant access" }).click();
   await expect(page.getByText("That password is not correct.")).toBeVisible();
 
-  await page.getByLabel("Confirm with your password").fill("correct horse battery staple");
+  await page
+    .getByLabel("Confirm with your password")
+    .fill("correct horse battery staple");
   await page.getByRole("button", { name: "Grant access" }).click();
   await expect(page.getByText("Access granted")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Back to who has access" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Back to who has access" }),
+  ).toBeVisible();
 
   // 5. Clinician reads the patient's record — consent now active
   asClinician = true;
   await page.goto(`/en/patients/${PATIENT_ID}/records`);
-  await expect(page.getByRole("heading", { name: "Patient record" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Patient record" }),
+  ).toBeVisible();
   await expect(page.getByText("Type 2 diabetes mellitus")).toBeVisible();
   asClinician = false;
 
   // 6. Patient's own audit view shows the clinician's read
   await page.goto("/en/audit");
-  await expect(page.getByRole("heading", { name: "Who accessed my records" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Who accessed my records" }),
+  ).toBeVisible();
   await expect(page.getByText("Dr. Fathima Rasheed")).toBeVisible();
   await expect(page.getByText("Amrita Hospital")).toBeVisible();
 
@@ -230,7 +295,9 @@ test("full demo spine: signup, upload, grant, clinician read, audit, revoke, loc
   await expect(page.getByText("Dr. Fathima Rasheed")).toBeVisible();
   await page.getByRole("button", { name: "Revoke" }).click();
   await page.getByRole("button", { name: "Confirm revoke" }).click();
-  await expect(page.getByText("Access revoked.")).toBeVisible();
+  await expect(
+    page.getByText("Consent revoked. Check remaining current access below."),
+  ).toBeVisible();
 
   // 8. Clinician is now locked out — identical 404 to "patient doesn't exist"
   asClinician = true;

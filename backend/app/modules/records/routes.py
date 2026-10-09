@@ -4,6 +4,7 @@ HTTP only — parse, guard, delegate to `service`. Consent-denied and
 not-your-record reads surface from the service as 404, never 403.
 """
 
+from datetime import date
 from typing import Annotated
 from urllib.parse import quote
 from uuid import UUID
@@ -19,7 +20,13 @@ from app.modules.auth.dependencies import AuthContext, current_user, requires
 from app.modules.records import service
 from app.modules.records.dependencies import get_storage_provider
 from app.modules.records.models import EntryType
-from app.modules.records.schemas import Document, EntryCreate, EntryDetail, EntrySummary
+from app.modules.records.schemas import (
+    Document,
+    EntryCreate,
+    EntryDetail,
+    EntryProvider,
+    EntrySummary,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["records"])
 
@@ -37,6 +44,10 @@ async def list_patient_entries(
     ctx: CurrentUser,
     session: SessionDep,
     entry_type: Annotated[EntryType | None, Query(alias="entryType")] = None,
+    from_date: Annotated[date | None, Query(alias="fromDate")] = None,
+    to_date: Annotated[date | None, Query(alias="toDate")] = None,
+    provider_id: Annotated[UUID | None, Query(alias="providerId")] = None,
+    q: Annotated[str | None, Query(max_length=100)] = None,
     cursor: str | None = None,
     limit: int = 50,
 ) -> Page[EntrySummary]:
@@ -45,9 +56,22 @@ async def list_patient_entries(
         ctx.actor,
         patient_id,
         entry_type=entry_type,
+        from_date=from_date,
+        to_date=to_date,
+        provider_id=provider_id,
+        q=q,
         cursor=cursor,
         limit=limit,
     )
+
+
+@router.get(
+    "/patients/{patient_id}/entry-providers", dependencies=[requires(Permission.RECORDS_READ)]
+)
+async def timeline_providers(
+    patient_id: UUID, ctx: CurrentUser, session: SessionDep
+) -> list[EntryProvider]:
+    return await service.timeline_providers(session, ctx.actor, patient_id)
 
 
 @router.get(
@@ -100,7 +124,8 @@ async def upload_document(
     storage: StorageDep,
     file: Annotated[UploadFile, File()],
 ) -> Document:
-    data = await file.read()
+    data = await file.read(25 * 1024 * 1024 + 1)
+    await file.close()
     return await service.add_document(
         session,
         ctx.actor,

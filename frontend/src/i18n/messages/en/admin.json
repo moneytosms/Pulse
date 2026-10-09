@@ -28,11 +28,18 @@
     "empty": "No duplicate candidates are waiting for review.",
     "actionErrorTitle": "Action failed",
     "recentMerges": {
-      "title": "Reversible merges",
-      "hint": "Every merge not yet reversed, by any administrator. Reversing moves the entries back.",
+      "title": "Recent merges",
+      "hint": "Merges not yet reversed. Later record changes can require manual review before reversal.",
       "reversed": "Reversed",
       "reverseCta": "Reverse merge",
       "pair": "{loser} merged into {winner}"
-    }
+    },
+    "accountConflict": "Two claimed accounts need account reconciliation before they can be merged.",
+    "confirmTitle": "Confirm surviving identity",
+    "confirmBody": "Move the records of {loser} into {winner}. The losing profile must be unclaimed. A later correction can prevent automatic reversal.",
+    "confirmCta": "Confirm merge",
+    "cancel": "Cancel",
+    "loadMore": "Load more candidates",
+    "loadMoreMerges": "Load more merges"
   }
 }

@@ -60,7 +60,7 @@
   --consent-revoked: oklch(0.505 0.213 27.518);
   --consent-expired: oklch(0.414 0.112 45.904);
   --consent-expired-surface: oklch(0.987 0.022 95.277);
-  --audit-normal: oklch(0.553 0.013 58.071);
+  --audit-normal: oklch(0.49 0.013 58.071);
   --audit-normal-surface: oklch(0.97 0.001 106.424);
   --audit-denied: oklch(0.408 0.123 38.172);
   --audit-denied-surface: oklch(0.98 0.016 73.684);

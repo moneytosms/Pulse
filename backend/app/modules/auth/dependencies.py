@@ -18,6 +18,7 @@ from app.core.actor import Actor
 from app.core.authz import Permission, Role, role_has_permission
 from app.core.errors import ErrorCode
 from app.core.exceptions import PulseError
+from app.core.rate_limit import check_limit
 from app.core.redis import get_redis
 from app.core.sessions import has_step_up, read_session
 from app.db.session import get_session
@@ -141,3 +142,11 @@ def public() -> params.Depends:
 
     setattr(marker, PUBLIC_ATTR, True)
     return params.Depends(marker)
+
+
+def throttled(scope: str, *, limit: int, window: int = 60) -> params.Depends:
+    async def guard(request: Request, redis: Redis = Depends(_redis)) -> None:
+        address = request.client.host if request.client else "unknown"
+        await check_limit(redis, scope, address, limit, window)
+
+    return params.Depends(guard)

@@ -43,12 +43,23 @@
     "revoke": {
       "action": "Revoke",
       "confirmTitle": "Revoke this consent?",
-      "confirmBody": "They will immediately lose access to your record.",
+      "confirmBody": "This consent will stop allowing access immediately. Other active consents or emergency access may still apply.",
       "reasonLabel": "Reason (optional)",
       "confirm": "Confirm revoke",
       "cancel": "Cancel",
       "revoking": "Revoking…",
-      "success": "Access revoked."
+      "success": "Consent revoked. Check remaining current access below."
+    },
+    "views": {
+      "label": "Access view",
+      "active": "Current access",
+      "history": "Consent history",
+      "activeHint": "Active consents are shown here. Check each scope and expiry; more than one consent may apply to a Clinician.",
+      "historyHint": "Revoked and expired consents are kept here for your reference.",
+      "noActive": "No one currently has access through your consents",
+      "noActiveBody": "You have no active consents. Emergency access is recorded separately in your access log.",
+      "noHistory": "No past consents",
+      "noHistoryBody": "Revoked or expired consents will appear here."
     }
   },
   "new": {
@@ -58,7 +69,7 @@
     "fields": {
       "granteeEmail": "Clinician email",
       "entryTypes": "Entry types",
-      "entryTypesHint": "Leave all unchecked to grant every entry type.",
+      "entryTypesHint": "Choose all types or select the types to share.",
       "fromDate": "From date (optional)",
       "toDate": "To date (optional)",
       "purpose": "Purpose",
@@ -70,14 +81,35 @@
       "requiredFields": "Enter a grantee, purpose and expiry.",
       "clinicianNotFound": "No clinician is registered with that email.",
       "passwordRequired": "Enter your password to grant access.",
-      "wrongPassword": "That password is not correct."
+      "wrongPassword": "That password is not correct.",
+      "scopeRequired": "Choose all entry types, or select at least one type.",
+      "expiryFuture": "Choose a valid future expiry time.",
+      "dateOrder": "The start date must be on or before the end date.",
+      "purposeRequired": "Explain the purpose before continuing."
     },
     "submit": "Grant access",
     "submitting": "Granting…",
     "success": {
       "title": "Access granted",
       "body": "The grantee can now read the entry types and date range you chose, until it expires or you revoke it.",
-      "viewConsents": "Back to who has access"
+      "viewConsents": "Back to who has access",
+      "details": "{email} can read {types} until {expiry}, within the history dates you reviewed."
+    },
+    "scope": {
+      "all": "All entry types",
+      "selected": "Choose entry types",
+      "hint": "Choose exactly what this Clinician may read.",
+      "historyHint": "These dates limit which Medical Entries are shared. Access ends at the separate expiry time below."
+    },
+    "review": {
+      "title": "Review before sharing",
+      "continue": "Review access",
+      "edit": "Edit details",
+      "history": "Medical history dates",
+      "beginning": "Beginning of history",
+      "latest": "No end-date limit",
+      "revokeHint": "You can revoke this consent at any time. Other active consents remain in effect.",
+      "checking": "Checking Clinician…"
     }
   }
 }

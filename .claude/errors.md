@@ -23,3 +23,8 @@ Rule: A ticket is resolved when its artifact is on `main`. Before closing one th
 What: P4.2's `identity_data_quality_flags` read Patient identity fields (DOB presence, phone, claim status) with no `actor` parameter at all. The commit security review flagged missing-authorization; none of the three enforcement lints, nor the 192 passing tests, said anything — the tests even quietly assumed the correct policy (owner-self and Administrator reads) without ever asserting the denial.
 Why: The actor-first rule is worded around Medical Entries ("no function returning Medical Entries takes less than an actor") and its lint only scans `records/{service,repository}.py`. Identity data is not clinical data, so it slipped past the letter of the rule and its tooling — but a bare `patient_id` is still a capability, and a docstring naming the intended consumer is not authorization.
 Rule: Any function that reads personal data — not just clinical data — takes an `actor` and gates on it, and the negative case (denied actor) gets a test, not an assumption. When P4.3 opens the admin module, extend `scripts/lint_actor_first.py` beyond `records/` so this is enforced by CI instead of by review luck.
+
+## [2026-10-08] Edit scripts used repository paths from a package directory
+What: Several frontend-review edit scripts failed before their intended writes because repository-relative paths were evaluated from frontend/ or backend/.
+Why: File edits and package-specific verification were mixed in commands with different working directories.
+Rule: Run repository-relative file edits from the repository root. Run package verification in separate commands with an explicit package directory; inspect each exit code.

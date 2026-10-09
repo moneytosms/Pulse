@@ -21,3 +21,5 @@ The losing Patient is tombstoned with `merged_into_id`, never deleted — audit 
 The review interface shows identity fields and entry counts only, never clinical contents, so that Administrators can work the queue without contradicting ADR-0007.
 
 A pair marked `NOT_DUPLICATE` is recorded as such and never re-flagged.
+
+Automatic reversal now requires unchanged ownership/revision/document dependencies. See [ADR-0016](0016-transactional-audit-and-safe-identity-merges.md) for supported ownership cases and coded conflicts requiring manual review.

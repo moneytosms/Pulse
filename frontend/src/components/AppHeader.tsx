@@ -29,7 +29,9 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
-import { api } from "@/lib/api";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useApiErrorMessage } from "@/lib/errors";
+import { api, ApiError } from "@/lib/api";
 import type { Me, Role } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
@@ -71,6 +73,9 @@ export function AppHeader() {
   const { resolvedTheme, setTheme } = useTheme();
   const [me, setMe] = useState<Me | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
+  const errorMessage = useApiErrorMessage();
 
   useEffect(() => {
     let active = true;
@@ -88,9 +93,23 @@ export function AppHeader() {
     pathname === href || pathname.startsWith(`${href}/`);
 
   async function signOut() {
-    await api.post("/auth/logout").catch(() => {});
-    setMe(null);
-    router.replace("/login");
+    if (signingOut) return;
+    setSigningOut(true);
+    setSignOutError(null);
+    try {
+      await api.post("/auth/logout");
+      setMe(null);
+      router.replace("/login");
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        setMe(null);
+        router.replace("/login");
+      } else {
+        setSignOutError(errorMessage(error));
+      }
+    } finally {
+      setSigningOut(false);
+    }
   }
 
   const navLinks = (onNavigate?: () => void) =>
@@ -118,97 +137,145 @@ export function AppHeader() {
     ));
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="mx-auto flex h-14 max-w-6xl items-center gap-4 px-4">
-        {links.length > 0 && (
-          <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-            <SheetTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="md:hidden"
-                aria-label={t("nav.openMenu")}
-              >
-                <MenuIcon />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-72">
-              <SheetHeader>
-                <SheetTitle>{t("app.name")}</SheetTitle>
-              </SheetHeader>
-              <nav
-                aria-label={t("nav.label")}
-                className="flex flex-col gap-1 px-4"
-              >
-                {navLinks(() => setMenuOpen(false))}
-              </nav>
-            </SheetContent>
-          </Sheet>
-        )}
-
-        <Link
-          href="/"
-          className="flex items-center gap-2 font-semibold tracking-tight"
-        >
-          <span className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <ActivityIcon className="size-4" strokeWidth={2.5} />
-          </span>
-          {t("app.name")}
-        </Link>
-
-        {links.length > 0 && (
-          <nav
-            aria-label={t("nav.label")}
-            className="hidden items-center gap-1 md:flex"
-          >
-            {navLinks()}
-          </nav>
-        )}
-
-        <div className="ml-auto flex items-center gap-1">
-          <LocaleSwitcher />
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={t("nav.toggleTheme")}
-            onClick={() =>
-              setTheme(resolvedTheme === "dark" ? "light" : "dark")
-            }
-          >
-            <SunIcon className="dark:hidden" />
-            <MoonIcon className="hidden dark:block" />
-          </Button>
-          {me ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+    <>
+      <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-4 sm:gap-4">
+          {links.length > 0 && (
+            <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+              <SheetTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label={t("nav.account")}
+                  className="xl:hidden"
+                  aria-label={t("nav.openMenu")}
                 >
-                  <UserIcon />
+                  <MenuIcon />
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel className="truncate font-normal text-muted-foreground">
-                  {me.email}
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={signOut}>
-                  <LogOutIcon />
-                  {t("nav.signOut")}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            pathname !== "/login" && (
-              <Button asChild size="sm">
-                <Link href="/login">{t("nav.signIn")}</Link>
-              </Button>
-            )
+              </SheetTrigger>
+              <SheetContent side="left" className="w-72">
+                <SheetHeader>
+                  <SheetTitle>{t("app.name")}</SheetTitle>
+                </SheetHeader>
+                <nav
+                  aria-label={t("nav.label")}
+                  className="flex flex-col gap-1 px-4"
+                >
+                  {navLinks(() => setMenuOpen(false))}
+                </nav>
+              </SheetContent>
+            </Sheet>
           )}
+
+          <Link
+            href="/"
+            aria-label={t("app.name")}
+            className="flex shrink-0 items-center gap-2 font-semibold tracking-tight"
+          >
+            <span className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
+              <ActivityIcon className="size-4" strokeWidth={2.5} />
+            </span>
+            <span className="hidden sm:inline">{t("app.name")}</span>
+          </Link>
+
+          {links.length > 0 && (
+            <nav
+              aria-label={t("nav.label")}
+              className="hidden items-center gap-1 xl:flex"
+            >
+              {navLinks()}
+            </nav>
+          )}
+
+          <div className="ml-auto flex items-center gap-1">
+            <LocaleSwitcher />
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("nav.toggleTheme")}
+              onClick={() =>
+                setTheme(resolvedTheme === "dark" ? "light" : "dark")
+              }
+            >
+              <SunIcon className="dark:hidden" />
+              <MoonIcon className="hidden dark:block" />
+            </Button>
+            {me ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={t("nav.account")}
+                  >
+                    <UserIcon />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel className="truncate font-normal text-muted-foreground">
+                    {me.email}
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={signOut} disabled={signingOut}>
+                    <LogOutIcon />
+                    {t("nav.signOut")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              pathname !== "/login" && (
+                <Button asChild size="sm">
+                  <Link href="/login">{t("nav.signIn")}</Link>
+                </Button>
+              )
+            )}
+          </div>
         </div>
-      </div>
-    </header>
+        {signOutError && (
+          <Alert
+            variant="destructive"
+            className="mx-auto max-w-6xl rounded-none border-x-0 border-b-0"
+          >
+            <AlertDescription>
+              <p>{t("nav.signOutFailed")}</p>
+              <p>{signOutError}</p>
+              <Button
+                variant="outline"
+                disabled={signingOut}
+                aria-busy={signingOut}
+                onClick={signOut}
+              >
+                {t("nav.retrySignOut")}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+      </header>
+      {me?.role === "PATIENT" && (
+        <nav
+          aria-label={t("nav.patientTasks")}
+          className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-3 border-t bg-background px-2 pb-[env(safe-area-inset-bottom)] sm:hidden"
+        >
+          {links
+            .filter((link) =>
+              ["/timeline", "/consent", "/audit"].includes(link.href),
+            )
+            .map(({ href, key }) => (
+              <Link
+                key={href}
+                href={href}
+                aria-current={isActive(href) ? "page" : undefined}
+                className={cn(
+                  "flex min-h-14 items-center justify-center rounded-lg px-2 py-2 text-center text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring",
+                  isActive(href)
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground",
+                )}
+              >
+                {t(`nav.${key}`)}
+              </Link>
+            ))}
+        </nav>
+      )}
+    </>
   );
 }

@@ -1,20 +1,37 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useEffect, useId, useRef, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { ActivityIcon, CircleAlertIcon, InfoIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+} from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useRouter } from "@/i18n/navigation";
 import { api, ApiError } from "@/lib/api";
 import type { AuditEventProjection } from "@/lib/audit";
 import { useApiErrorMessage } from "@/lib/errors";
-import { formatDate } from "@/lib/format";
+import { SelectFilter } from "@/components/SelectFilter";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { AuditActionValues, RoleValues } from "@/lib/generated/api";
+import { formatDateTime } from "@/lib/format";
 import type { Page } from "@/lib/records";
 
 const LIMIT = 20;
@@ -36,7 +53,13 @@ type LoadState =
 // action severe enough to warrant its own highlight and token set
 // (.claude/rules/clinical-safety.md — break-glass is CRITICAL-audited).
 // Everything else reads as a normal access.
-function SeverityBadge({ isBreakGlass, label }: { isBreakGlass: boolean; label: string }) {
+function SeverityBadge({
+  isBreakGlass,
+  label,
+}: {
+  isBreakGlass: boolean;
+  label: string;
+}) {
   return (
     <Badge
       variant="outline"
@@ -46,7 +69,11 @@ function SeverityBadge({ isBreakGlass, label }: { isBreakGlass: boolean; label: 
           : "border-audit-normal bg-audit-normal-surface text-audit-normal"
       }
     >
-      {isBreakGlass ? <CircleAlertIcon className="size-3.5" /> : <InfoIcon className="size-3.5" />}
+      {isBreakGlass ? (
+        <CircleAlertIcon className="size-3.5" />
+      ) : (
+        <InfoIcon className="size-3.5" />
+      )}
       {label}
     </Badge>
   );
@@ -57,6 +84,17 @@ function SeverityBadge({ isBreakGlass, label }: { isBreakGlass: boolean; label: 
 // touched. Never clinical content (.claude/rules/clinical-safety.md).
 export default function AuditEventsPage() {
   const t = useTranslations("audit");
+  const locale = useLocale();
+  const tAuth = useTranslations("auth");
+  const filterId = useId();
+  const [filters, setFilters] = useState({
+    action: "",
+    actorRole: "",
+    from: "",
+    through: "",
+  });
+  const [applied, setApplied] = useState(filters);
+  const [filterError, setFilterError] = useState(false);
   const tTimeline = useTranslations("timeline");
   const errorMessage = useApiErrorMessage();
   const router = useRouter();
@@ -64,9 +102,27 @@ export default function AuditEventsPage() {
   const [patientId, setPatientId] = useState<string | null>(null);
   const [retryToken, setRetryToken] = useState(0);
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  const paginationRequest = useRef<AbortController | null>(null);
+  const query = new URLSearchParams({
+    patientId: patientId ?? "",
+    limit: String(LIMIT),
+  });
+  if (applied.action) query.set("action", applied.action);
+  if (applied.actorRole) query.set("actorRole", applied.actorRole);
+  if (applied.from) query.set("since", `${applied.from}T00:00:00Z`);
+  if (applied.through) {
+    const until = new Date(`${applied.through}T00:00:00Z`);
+    until.setUTCDate(until.getUTCDate() + 1);
+    query.set("until", until.toISOString());
+  }
+  const queryString = query.toString();
 
   useEffect(() => {
+    if (patientId) return;
     let active = true;
+    Promise.resolve().then(() => {
+      if (active) setState({ status: "loading" });
+    });
     api
       .get<{ id: string }>("/patients/me")
       .then((profile) => {
@@ -74,7 +130,10 @@ export default function AuditEventsPage() {
       })
       .catch((err) => {
         if (!active) return;
-        if (err instanceof ApiError && (err.status === 401 || err.code === "SESSION_EXPIRED")) {
+        if (
+          err instanceof ApiError &&
+          (err.status === 401 || err.code === "SESSION_EXPIRED")
+        ) {
           router.replace("/login");
           return;
         }
@@ -89,7 +148,7 @@ export default function AuditEventsPage() {
     };
     // errorMessage / router are stable for the page lifetime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [patientId, retryToken]);
 
   useEffect(() => {
     if (!patientId) return;
@@ -98,7 +157,7 @@ export default function AuditEventsPage() {
       if (active) setState({ status: "loading" });
     });
     api
-      .get<Page<AuditEventProjection>>(`/audit-events?patientId=${patientId}&limit=${LIMIT}`)
+      .get<Page<AuditEventProjection>>(`/audit-events?${queryString}`)
       .then((page) => {
         if (!active) return;
         setState({
@@ -111,28 +170,37 @@ export default function AuditEventsPage() {
       })
       .catch((err) => {
         if (!active) return;
-        if (err instanceof ApiError && (err.status === 401 || err.code === "SESSION_EXPIRED")) {
+        if (
+          err instanceof ApiError &&
+          (err.status === 401 || err.code === "SESSION_EXPIRED")
+        ) {
           router.replace("/login");
           return;
         }
         setState({ status: "error", message: errorMessage(err) });
       });
     return () => {
+      paginationRequest.current?.abort();
       active = false;
     };
     // errorMessage / router are stable for the page lifetime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [patientId, retryToken]);
+  }, [patientId, retryToken, queryString]);
 
   function loadMore() {
     if (!patientId || state.status !== "ready" || !state.nextCursor) return;
     const cursor = state.nextCursor;
+    paginationRequest.current?.abort();
+    const controller = new AbortController();
+    paginationRequest.current = controller;
     setState({ ...state, loadingMore: true, loadMoreError: null });
     api
       .get<Page<AuditEventProjection>>(
-        `/audit-events?patientId=${patientId}&limit=${LIMIT}&cursor=${cursor}`,
+        `/audit-events?${queryString}&cursor=${encodeURIComponent(cursor)}`,
+        { signal: controller.signal },
       )
       .then((page) => {
+        if (controller.signal.aborted) return;
         setState((prev) =>
           prev.status === "ready"
             ? {
@@ -146,6 +214,7 @@ export default function AuditEventsPage() {
         );
       })
       .catch((err) => {
+        if (controller.signal.aborted) return;
         setState((prev) =>
           prev.status === "ready"
             ? { ...prev, loadingMore: false, loadMoreError: errorMessage(err) }
@@ -161,18 +230,138 @@ export default function AuditEventsPage() {
 
   function entryTypeLabel(entryType: string | null): string {
     if (!entryType) return t("entryTypeNone");
-    return tTimeline.has(`entryTypes.${entryType}`) ? tTimeline(`entryTypes.${entryType}`) : entryType;
+    return tTimeline.has(`entryTypes.${entryType}`)
+      ? tTimeline(`entryTypes.${entryType}`)
+      : entryType;
   }
 
   return (
     <section className="animate-in fade-in-0 slide-in-from-bottom-1 motion-reduce:animate-none space-y-8 duration-300">
       <div className="space-y-1">
-        <h1 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">{t("title")}</h1>
-        <p className="text-pretty text-sm text-muted-foreground">{t("subtitle")}</p>
+        <h1 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
+          {t("title")}
+        </h1>
+        <p className="text-pretty text-sm text-muted-foreground">
+          {t("subtitle")}
+        </p>
       </div>
 
+      <details className="rounded-xl border px-4 py-3">
+        <summary className="min-h-6 cursor-pointer text-sm font-medium">
+          {t("filters.title")}
+          {Object.values(applied).some(Boolean) && (
+            <span className="ml-2 font-normal text-muted-foreground">
+              {t("filters.applied")}
+            </span>
+          )}
+        </summary>
+        <div className="mt-4">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (
+                filters.from &&
+                filters.through &&
+                filters.from > filters.through
+              ) {
+                setFilterError(true);
+                return;
+              }
+              setFilterError(false);
+              paginationRequest.current?.abort();
+              setApplied(filters);
+            }}
+            className="space-y-3"
+          >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <SelectFilter
+                label={t("filters.action")}
+                value={filters.action}
+                onChange={(e) =>
+                  setFilters({ ...filters, action: e.target.value })
+                }
+              >
+                <option value="">{t("filters.allActions")}</option>
+                {AuditActionValues.map((action) => (
+                  <option key={action} value={action}>
+                    {actionLabel(action)}
+                  </option>
+                ))}
+              </SelectFilter>
+              <SelectFilter
+                label={t("filters.actor")}
+                value={filters.actorRole}
+                onChange={(e) =>
+                  setFilters({ ...filters, actorRole: e.target.value })
+                }
+              >
+                <option value="">{t("filters.allActors")}</option>
+                {RoleValues.map((role) => (
+                  <option key={role} value={role}>
+                    {tAuth(`roles.${role}`)}
+                  </option>
+                ))}
+              </SelectFilter>
+              <div className="space-y-1.5">
+                <Label htmlFor={`${filterId}-from`}>{t("filters.from")}</Label>
+                <Input
+                  id={`${filterId}-from`}
+                  type="date"
+                  value={filters.from}
+                  onChange={(e) =>
+                    setFilters({ ...filters, from: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor={`${filterId}-through`}>
+                  {t("filters.through")}
+                </Label>
+                <Input
+                  id={`${filterId}-through`}
+                  type="date"
+                  value={filters.through}
+                  onChange={(e) =>
+                    setFilters({ ...filters, through: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {t("filters.timezone")}
+            </p>
+            {filterError && (
+              <p role="alert" className="text-sm text-destructive">
+                {t("filters.dateOrder")}
+              </p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit">{t("filters.apply")}</Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  const empty = {
+                    action: "",
+                    actorRole: "",
+                    from: "",
+                    through: "",
+                  };
+                  paginationRequest.current?.abort();
+                  setFilters(empty);
+                  setApplied(empty);
+                  setFilterError(false);
+                }}
+              >
+                {t("filters.reset")}
+              </Button>
+            </div>
+          </form>
+        </div>
+      </details>
+
       {state.status === "loading" && (
-        <div className="space-y-3" aria-hidden="true">
+        <div className="space-y-3" role="status" aria-live="polite">
           <span className="sr-only">{t("loading")}</span>
           {[0, 1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-14 w-full rounded-xl" />
@@ -197,11 +386,9 @@ export default function AuditEventsPage() {
             <AlertTitle>{t("error.title")}</AlertTitle>
             <AlertDescription>{state.message}</AlertDescription>
           </Alert>
-          {patientId && (
-            <Button variant="outline" onClick={() => setRetryToken((n) => n + 1)}>
-              {t("error.retry")}
-            </Button>
-          )}
+          <Button variant="outline" onClick={() => setRetryToken((n) => n + 1)}>
+            {t("error.retry")}
+          </Button>
         </div>
       )}
 
@@ -211,8 +398,22 @@ export default function AuditEventsPage() {
             <EmptyMedia variant="icon">
               <ActivityIcon />
             </EmptyMedia>
-            <EmptyTitle>{t("empty.title")}</EmptyTitle>
-            <EmptyDescription>{t("empty.body")}</EmptyDescription>
+            <EmptyTitle>
+              {applied.action ||
+              applied.actorRole ||
+              applied.from ||
+              applied.through
+                ? t("filters.emptyTitle")
+                : t("empty.title")}
+            </EmptyTitle>
+            <EmptyDescription>
+              {applied.action ||
+              applied.actorRole ||
+              applied.from ||
+              applied.through
+                ? t("filters.emptyBody")
+                : t("empty.body")}
+            </EmptyDescription>
           </EmptyHeader>
         </Empty>
       )}
@@ -244,35 +445,49 @@ export default function AuditEventsPage() {
                         (isBreakGlass ? "bg-break-glass-surface" : "")
                       }
                     >
-                      <TableCell className="text-foreground max-sm:flex max-sm:items-center max-sm:justify-between">
+                      <TableCell className="text-foreground max-sm:flex max-sm:items-start max-sm:justify-between max-sm:gap-3">
                         <span className="hidden text-xs text-muted-foreground max-sm:inline">
                           {t("fields.actor")}
                         </span>
-                        {event.actorName}
+                        <span className="min-w-0 break-words">
+                          <span className="block font-medium">
+                            {event.isSelf ? t("you") : event.actorName}
+                          </span>
+                          <span className="block text-xs text-muted-foreground">
+                            {tAuth.has(`roles.${event.actorRole}`)
+                              ? tAuth(`roles.${event.actorRole}`)
+                              : t("unknownActor")}
+                          </span>
+                        </span>
                       </TableCell>
-                      <TableCell className="text-foreground max-sm:flex max-sm:items-center max-sm:justify-between">
+                      <TableCell className="text-foreground max-sm:flex max-sm:items-start max-sm:justify-between max-sm:gap-3">
                         <span className="hidden text-xs text-muted-foreground max-sm:inline">
                           {t("fields.provider")}
                         </span>
                         {event.providerName ?? t("entryTypeNone")}
                       </TableCell>
-                      <TableCell className="max-sm:flex max-sm:items-center max-sm:justify-between">
+                      <TableCell className="max-sm:flex max-sm:items-start max-sm:justify-between max-sm:gap-3">
                         <span className="hidden text-xs text-muted-foreground max-sm:inline">
                           {t("fields.action")}
                         </span>
-                        <SeverityBadge isBreakGlass={isBreakGlass} label={actionLabel(event.action)} />
+                        <SeverityBadge
+                          isBreakGlass={isBreakGlass}
+                          label={actionLabel(event.action)}
+                        />
                       </TableCell>
-                      <TableCell className="text-foreground max-sm:flex max-sm:items-center max-sm:justify-between">
+                      <TableCell className="text-foreground max-sm:flex max-sm:items-start max-sm:justify-between max-sm:gap-3">
                         <span className="hidden text-xs text-muted-foreground max-sm:inline">
                           {t("fields.entryType")}
                         </span>
                         {entryTypeLabel(event.entryType)}
                       </TableCell>
-                      <TableCell className="tabular-nums text-foreground max-sm:flex max-sm:items-center max-sm:justify-between">
+                      <TableCell className="tabular-nums whitespace-normal text-foreground max-sm:flex max-sm:items-start max-sm:justify-between max-sm:gap-3">
                         <span className="hidden text-xs text-muted-foreground max-sm:inline">
                           {t("fields.occurredAt")}
                         </span>
-                        {formatDate(event.occurredAt)}
+                        <time dateTime={event.occurredAt}>
+                          {formatDateTime(event.occurredAt, `${locale}-IN`)}
+                        </time>
                       </TableCell>
                     </TableRow>
                   );
@@ -280,6 +495,10 @@ export default function AuditEventsPage() {
               </TableBody>
             </Table>
           </div>
+
+          <p className="text-sm text-muted-foreground">
+            {t("filters.detailsHint")}
+          </p>
 
           {state.loadMoreError && (
             <Alert variant="destructive">

@@ -28,7 +28,7 @@ def summary_text(entry: MedicalEntry) -> str | None:
     return str(note)[:120] if note else None
 
 
-def to_summary(entry: MedicalEntry) -> EntrySummary:
+def to_summary(entry: MedicalEntry, provider_name: str | None = None) -> EntrySummary:
     return EntrySummary(
         id=entry.id,
         patient_id=entry.patient_id,
@@ -38,6 +38,7 @@ def to_summary(entry: MedicalEntry) -> EntrySummary:
         is_critical=entry.is_critical,
         superseded_by_id=entry.superseded_by_id,
         source_provider_id=entry.source_provider_id,
+        provider_name=provider_name,
         summary=summary_text(entry),
     )
 

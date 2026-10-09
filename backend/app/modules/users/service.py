@@ -29,12 +29,14 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import UUID
 
+from sqlalchemy import ColumnElement
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.actor import Actor
 from app.core.authz import Role
 from app.core.errors import ErrorCode
 from app.core.exceptions import PulseError
+from app.core.transactions import transactional
 from app.modules.patients.schemas import PatientProfile
 from app.modules.users import repository
 from app.modules.users.models import (
@@ -320,6 +322,7 @@ async def mark_not_duplicate(
     return item
 
 
+@transactional
 async def merge_patients(
     session: AsyncSession, actor: Actor, winner_id: UUID, loser_id: UUID
 ) -> PatientMerge:
@@ -332,13 +335,33 @@ async def merge_patients(
 
     _require_administrator(actor)
     if winner_id == loser_id:
-        raise ValueError("cannot merge a patient into itself")
+        raise PulseError(ErrorCode.CONFLICT, "Cannot merge a patient into itself.", http_status=409)
 
-    winner = await repository.get_patient_by_id(session, winner_id)
-    loser = await repository.get_patient_by_id(session, loser_id)
+    locked = {p.id: p for p in await repository.lock_patients(session, [winner_id, loser_id])}
+    winner = locked.get(winner_id)
+    loser = locked.get(loser_id)
     if winner is None or loser is None:
-        raise ValueError("both patients must exist")
+        raise PulseError(ErrorCode.NOT_FOUND, "Both patients must exist.", http_status=404)
 
+    if (
+        winner.merged_into_id is not None
+        or loser.merged_into_id is not None
+        or loser.user_id is not None
+        or await repository.has_open_merge(session, [winner_id, loser_id])
+    ):
+        raise PulseError(
+            ErrorCode.CONFLICT,
+            "Merge ownership or history conflicts; the losing patient must be unclaimed.",
+            http_status=409,
+        )
+    from app.modules.consent import service as consent_service
+
+    if await consent_service.has_live_patient_grants(session, loser_id):
+        raise PulseError(
+            ErrorCode.CONFLICT,
+            "Losing identity has live grants; resolve them before merging.",
+            http_status=409,
+        )
     moved_ids = await records_service.reassign_patient_entries(
         session, actor, from_patient_id=loser_id, to_patient_id=winner_id
     )
@@ -350,6 +373,7 @@ async def merge_patients(
         loser_patient_id=loser_id,
         actor_user_id=actor.user_id,
         moved_entry_ids=[str(i) for i in moved_ids],
+        occurred_at=await repository.operation_time(session),
     )
     session.add(merge)
 
@@ -360,7 +384,17 @@ async def merge_patients(
         status=ReviewStatus.MERGED,
         decided_by_user_id=actor.user_id,
     )
-    await session.commit()
+    from app.modules.audit import service as audit_service
+
+    await audit_service.emit(
+        session,
+        actor=actor,
+        action=audit_service.AuditAction.PATIENT_MERGED,
+        resource_type="patient_merge",
+        resource_id=merge.id,
+        patient_id=winner_id,
+        outcome=audit_service.AuditOutcome.SUCCESS,
+    )
     return merge
 
 
@@ -372,30 +406,93 @@ async def list_reversible_merges(session: AsyncSession, actor: Actor) -> list[Pa
     return await repository.list_unreversed_merges(session)
 
 
+@transactional
 async def reverse_merge(session: AsyncSession, actor: Actor, merge_id: UUID) -> PatientMerge:
-    """Moves every entry in `moved_entry_ids` back to the loser and
-    un-tombstones it. `actor` is accepted (not yet used beyond typing)
-    because every merge-affecting function takes one — the audit layer
-    reads it, once P4.3 wires audit emission for this path.
-    """
+    """Reverse only when ownership and later clinical dependencies are safe."""
     from app.modules.records import service as records_service
 
     _require_administrator(actor)
-    merge = await session.get(PatientMerge, merge_id)
+    merge = await repository.get_merge_for_update(session, merge_id)
     if merge is None:
-        raise ValueError("merge not found")
+        raise PulseError(ErrorCode.NOT_FOUND, "Merge not found.", http_status=404)
     if merge.reversed_at is not None:
-        raise ValueError("merge already reversed")
+        raise PulseError(ErrorCode.CONFLICT, "Merge already reversed.", http_status=409)
 
+    locked = {
+        p.id: p
+        for p in await repository.lock_patients(
+            session, [merge.winner_patient_id, merge.loser_patient_id]
+        )
+    }
+    loser = locked[merge.loser_patient_id]
+    if loser.merged_into_id != merge.winner_patient_id or await repository.has_open_merge(
+        session, list(locked), excluding=merge.id
+    ):
+        raise PulseError(ErrorCode.CONFLICT, "Merge history changed.", http_status=409)
     entry_ids = [UUID(i) for i in merge.moved_entry_ids]
+    if await records_service.entry_reassignment_conflicts(
+        session, actor, entry_ids, merge.winner_patient_id, merge.occurred_at
+    ):
+        raise PulseError(
+            ErrorCode.CONFLICT,
+            "Moved entries have changed; reversal needs manual review.",
+            http_status=409,
+        )
     await records_service.reverse_entry_reassignment(
         session, actor, entry_ids=entry_ids, to_patient_id=merge.loser_patient_id
     )
 
-    loser = await repository.get_patient_by_id(session, merge.loser_patient_id)
-    if loser is not None:
-        loser.merged_into_id = None
+    loser.merged_into_id = None
 
     merge.reversed_at = datetime.now(UTC)
-    await session.commit()
+    from app.modules.audit import service as audit_service
+
+    await audit_service.emit(
+        session,
+        actor=actor,
+        action=audit_service.AuditAction.MERGE_REVERSED,
+        resource_type="patient_merge",
+        resource_id=merge.id,
+        patient_id=merge.winner_patient_id,
+        outcome=audit_service.AuditOutcome.SUCCESS,
+    )
     return merge
+
+
+async def lock_patient_for_write(session: AsyncSession, patient_id: UUID) -> None:
+    patients = await repository.lock_patients(session, [patient_id])
+    if not patients:
+        raise PulseError(ErrorCode.NOT_FOUND, "Patient not found.", http_status=404)
+    if patients[0].merged_into_id is not None:
+        raise PulseError(
+            ErrorCode.CONFLICT, "Patient was merged; use the surviving identity.", http_status=409
+        )
+
+
+async def duplicate_review_page(
+    session: AsyncSession, actor: Actor, *, cursor: str | None, limit: int
+) -> tuple[list[DuplicateReviewItem], str | None]:
+    _require_administrator(actor)
+    return await repository.pending_review_page(session, cursor=cursor, limit=limit)
+
+
+async def reversible_merge_page(
+    session: AsyncSession, actor: Actor, *, cursor: str | None, limit: int
+) -> tuple[list[PatientMerge], str | None]:
+    _require_administrator(actor)
+    return await repository.unreversed_merge_page(session, cursor=cursor, limit=limit)
+
+
+def audit_patient_scope(
+    patient_id: UUID, event_patient_id: ColumnElement[UUID | None]
+) -> ColumnElement[bool]:
+    """Audit history follows current tombstones without rewriting historical rows."""
+    return repository.audit_patient_scope(patient_id, event_patient_id)
+
+
+async def patient_map(session: AsyncSession, patient_ids: list[UUID]) -> dict[UUID, Patient]:
+    return await repository.patient_map(session, patient_ids)
+
+
+async def user_email_map(session: AsyncSession, user_ids: list[UUID]) -> dict[UUID, str]:
+    return await repository.user_email_map(session, user_ids)

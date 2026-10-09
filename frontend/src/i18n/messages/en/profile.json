@@ -25,5 +25,8 @@
     "audit": "Who accessed my records",
     "analytics": "My health analytics"
   },
-  "patientIdHint": "Share this with a clinician so they can open your record once you grant access."
+  "patientIdHint": "Share this with a clinician so they can open your record once you grant access.",
+  "copyId": "Copy patient ID",
+  "copiedId": "Patient ID copied",
+  "copyFailed": "Could not copy the ID. Select and copy it manually."
 }

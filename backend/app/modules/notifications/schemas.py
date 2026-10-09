@@ -13,6 +13,8 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
+from pydantic import ConfigDict, Field, StrictInt
+
 from app.core.schema import PulseSchema
 
 
@@ -34,11 +36,23 @@ class NotificationChannel(StrEnum):
     IN_APP = "IN_APP"
 
 
+class NotificationParams(PulseSchema):
+    """Only counts and typed identifiers can leave the consent filter."""
+
+    model_config = ConfigDict(extra="forbid")
+    view_count: StrictInt | None = Field(default=None, ge=0)
+    entry_id: UUID | None = None
+    patient_id: UUID | None = None
+    consent_id: UUID | None = None
+    provider_id: UUID | None = None
+
+
 class Notification(PulseSchema):
     id: UUID
     type: NotificationType
     title: str
     body: str
+    params: NotificationParams = Field(default_factory=NotificationParams)
     read_at: datetime | None = None
     created_at: datetime
 

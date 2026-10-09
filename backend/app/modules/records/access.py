@@ -86,6 +86,11 @@ async def resolve_patient_access(
     owns_own_history = await repository.actor_owns_patient(session, actor, patient_id)
     provider_id = await repository.provider_id_for_staff_actor(session, actor)
 
+    if provider_id is not None and not await repository.provider_has_patient_entries(
+        session, actor, patient_id, provider_id
+    ):
+        provider_id = None
+
     permissions: tuple[repository.LivePermission, ...] = ()
     break_glass_active = False
     if actor.role is Role.CLINICIAN:

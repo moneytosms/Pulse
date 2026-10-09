@@ -21,6 +21,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Link, useRouter } from "@/i18n/navigation";
 import type { DuplicateReviewCandidate, MergeRecord, MergeResult } from "@/lib/admin";
 import { api, ApiError } from "@/lib/api";
+import type { Page } from "@/lib/records";
 import type { Me } from "@/lib/auth";
 import { useApiErrorMessage } from "@/lib/errors";
 import { formatDate } from "@/lib/format";
@@ -41,7 +42,7 @@ type GateState = { status: "loading" } | { status: "denied" } | { status: "error
 type QueueState =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ready"; items: DuplicateReviewCandidate[] };
+  | { status: "ready"; items: DuplicateReviewCandidate[]; nextCursor: string | null };
 
 type RowBusy = "merge" | "notDuplicate" | null;
 
@@ -55,6 +56,9 @@ export default function DuplicateReviewPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [busyKind, setBusyKind] = useState<RowBusy>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [pendingMerge, setPendingMerge] = useState<string | null>(null);
+  const [mergeCursor, setMergeCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [merges, setMerges] = useState<MergeRecord[]>([]);
   const [reversingId, setReversingId] = useState<string | null>(null);
 
@@ -93,9 +97,9 @@ export default function DuplicateReviewPage() {
       if (active) setQueue({ status: "loading" });
     });
     api
-      .get<DuplicateReviewCandidate[]>("/admin/duplicate-review")
-      .then((items) => {
-        if (active) setQueue({ status: "ready", items });
+      .get<Page<DuplicateReviewCandidate>>("/admin/duplicate-review")
+      .then((page) => {
+        if (active) setQueue({ status: "ready", items: page.items, nextCursor: page.nextCursor });
       })
       .catch((err) => {
         if (active) setQueue({ status: "error", message: errorMessage(err) });
@@ -108,8 +112,8 @@ export default function DuplicateReviewPage() {
 
   function loadMerges() {
     api
-      .get<MergeRecord[]>("/admin/merges")
-      .then(setMerges)
+      .get<Page<MergeRecord>>("/admin/merges")
+      .then(page => { setMerges(page.items); setMergeCursor(page.nextCursor); })
       .catch((err) => setActionError(errorMessage(err)));
   }
 
@@ -142,15 +146,8 @@ export default function DuplicateReviewPage() {
   }
 
   function merge(candidate: DuplicateReviewCandidate) {
-    // The candidate with more entries wins by default — a reasonable default
-    // absent any ticket guidance on which side should be the winner; the
-    // admin can still tell the two apart before confirming since both
-    // identities are shown in full.
-    const winner =
-      candidate.patientA.entryCount >= candidate.patientB.entryCount
-        ? candidate.patientA
-        : candidate.patientB;
-    const loser = winner === candidate.patientA ? candidate.patientB : candidate.patientA;
+    const {winner, loser} = mergeDirection(candidate);
+    setPendingMerge(null);
 
     setBusyId(candidate.id);
     setBusyKind("merge");
@@ -187,6 +184,22 @@ export default function DuplicateReviewPage() {
       })
       .catch((err) => setActionError(errorMessage(err)))
       .finally(() => setReversingId(null));
+  }
+
+  async function loadMore(kind: "queue" | "merges") {
+    const cursor = kind === "queue" && queue.status === "ready" ? queue.nextCursor : mergeCursor;
+    if (!cursor || loadingMore) return;
+    setLoadingMore(true); setActionError(null);
+    try {
+      if (kind === "queue") {
+        const page = await api.get<Page<DuplicateReviewCandidate>>(`/admin/duplicate-review?cursor=${encodeURIComponent(cursor)}`);
+        setQueue(prev => prev.status === "ready" ? { ...prev, items: [...prev.items, ...page.items], nextCursor: page.nextCursor } : prev);
+      } else {
+        const page = await api.get<Page<MergeRecord>>(`/admin/merges?cursor=${encodeURIComponent(cursor)}`);
+        setMerges(prev => [...prev, ...page.items]); setMergeCursor(page.nextCursor);
+      }
+    } catch (error) { setActionError(errorMessage(error)); }
+    finally { setLoadingMore(false); }
   }
 
   if (gate.status === "loading") return <p className="text-sm text-muted-foreground">{t("loading")}</p>;
@@ -304,11 +317,22 @@ export default function DuplicateReviewPage() {
                 </TableBody>
               </Table>
 
+              {candidate.patientA.claimed && candidate.patientB.claimed && <p className="text-sm text-muted-foreground">{t("duplicateReview.accountConflict")}</p>}
+              {pendingMerge === candidate.id && <Alert>
+                <AlertTitle>{t("duplicateReview.confirmTitle")}</AlertTitle>
+                <AlertDescription className="space-y-3">
+                  <p>{t("duplicateReview.confirmBody", { winner: mergeDirection(candidate).winner.fullName, loser: mergeDirection(candidate).loser.fullName })}</p>
+                  <div className="flex flex-wrap gap-3">
+                    <Button disabled={busyId !== null} onClick={() => merge(candidate)}>{t("duplicateReview.confirmCta")}</Button>
+                    <Button variant="outline" onClick={() => setPendingMerge(null)}>{t("duplicateReview.cancel")}</Button>
+                  </div>
+                </AlertDescription>
+              </Alert>}
               <div className="flex flex-wrap gap-3">
                 <Button
-                  disabled={busyId !== null}
+                  disabled={busyId !== null || (candidate.patientA.claimed && candidate.patientB.claimed)}
                   aria-busy={busyId === candidate.id && busyKind === "merge"}
-                  onClick={() => merge(candidate)}
+                  onClick={() => setPendingMerge(candidate.id)}
                 >
                   {busyId === candidate.id && busyKind === "merge" && <Spinner />}
                   {t("duplicateReview.mergeCta")}
@@ -326,6 +350,9 @@ export default function DuplicateReviewPage() {
             </CardContent>
           </Card>
         ))}
+
+      {queue.status === "ready" && queue.nextCursor && <Button variant="outline" disabled={loadingMore} onClick={() => loadMore("queue")}>{t("duplicateReview.loadMore")}</Button>}
+      {mergeCursor && <Button variant="outline" disabled={loadingMore} onClick={() => loadMore("merges")}>{t("duplicateReview.loadMoreMerges")}</Button>}
 
       {merges.length > 0 && (
         <Card>
@@ -369,4 +396,11 @@ export default function DuplicateReviewPage() {
       )}
     </section>
   );
+}
+
+
+function mergeDirection(candidate: DuplicateReviewCandidate) {
+  const { patientA: a, patientB: b } = candidate;
+  const winner = a.claimed !== b.claimed ? (a.claimed ? a : b) : (a.entryCount >= b.entryCount ? a : b);
+  return {winner, loser: winner === a ? b : a};
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { BellIcon, CircleCheckIcon, InfoIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -93,13 +93,12 @@ function NotificationRow({
       </div>
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-xs font-medium text-muted-foreground">
-            {typeLabel(notification.type, t)}
-          </span>
+          <p className="text-sm font-medium text-pretty text-foreground">{typeLabel(notification.type, t)}</p>
           <ReadBadge readAt={notification.readAt} />
         </div>
-        <p className="text-sm font-medium text-pretty text-foreground">{notification.title}</p>
-        <p className="text-sm text-pretty text-muted-foreground">{notification.body}</p>
+        <p className="text-sm text-pretty text-muted-foreground">{notification.type === "DAILY_DIGEST"
+          ? t("content.DAILY_DIGEST", { count: typeof notification.params?.viewCount === "number" ? notification.params.viewCount : 0 })
+          : t(`content.${notification.type}`)}</p>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs tabular-nums text-muted-foreground">
             {formatDate(notification.createdAt)}
@@ -154,6 +153,7 @@ export default function NotificationsPage() {
 
   const [retryToken, setRetryToken] = useState(0);
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  const paginationRequest = useRef<AbortController | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -181,6 +181,7 @@ export default function NotificationsPage() {
         setState({ status: "error", message: errorMessage(err) });
       });
     return () => {
+      paginationRequest.current?.abort();
       active = false;
     };
     // errorMessage / router are stable for the page lifetime.
@@ -198,10 +199,14 @@ export default function NotificationsPage() {
   function loadMore() {
     if (state.status !== "ready" || !state.nextCursor) return;
     const cursor = state.nextCursor;
+    paginationRequest.current?.abort();
+    const controller = new AbortController();
+    paginationRequest.current = controller;
     setState({ ...state, loadingMore: true, loadMoreError: null });
     api
-      .get<Page<Notification>>(`/notifications?limit=${LIMIT}&cursor=${cursor}`)
+      .get<Page<Notification>>(`/notifications?limit=${LIMIT}&cursor=${cursor}`, { signal: controller.signal })
       .then((page) => {
+        if (controller.signal.aborted) return;
         setState((prev) =>
           prev.status === "ready"
             ? {
@@ -215,6 +220,7 @@ export default function NotificationsPage() {
         );
       })
       .catch((err) => {
+        if (controller.signal.aborted) return;
         setState((prev) =>
           prev.status === "ready"
             ? { ...prev, loadingMore: false, loadMoreError: errorMessage(err) }

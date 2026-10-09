@@ -32,9 +32,10 @@ the enum already carries.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 from uuid import UUID
 
+from sqlalchemy import ColumnElement
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.notifications import NotificationProvider
@@ -43,6 +44,7 @@ from app.core.authz import Role
 from app.core.errors import ErrorCode
 from app.core.exceptions import PulseError
 from app.core.pagination import Page
+from app.core.transactions import transactional
 from app.modules.audit import service as audit_service
 from app.modules.audit.service import AuditAction, AuditMetadata, AuditOutcome
 from app.modules.consent import repository
@@ -55,6 +57,7 @@ from app.modules.consent.schemas import (
     ConsentCreate,
     ConsentedPatient,
     ConsentStatus,
+    LivePermission,
     RevocationRequest,
 )
 from app.modules.notifications import service as notifications_service
@@ -86,11 +89,12 @@ def _status(row: ConsentRow, now: datetime) -> ConsentStatus:
     return ConsentStatus.ACTIVE
 
 
-def _to_wire(row: ConsentRow) -> Consent:
+def _to_wire(row: ConsentRow, grantee_name: str | None = None) -> Consent:
     return Consent(
         id=row.id,
         patient_id=row.patient_id,
         grantee_user_id=row.grantee_user_id,
+        grantee_name=grantee_name,
         entry_types=row.entry_types,
         from_date=row.from_date,
         to_date=row.to_date,
@@ -125,6 +129,7 @@ async def lookup_clinician(session: AsyncSession, actor: Actor, email: str) -> C
     return ClinicianLookup(user_id=user.id, email=user.email)
 
 
+@transactional
 async def grant_consent(session: AsyncSession, actor: Actor, payload: ConsentCreate) -> Consent:
     """Step-up gated at the route. `expires_at` must be 1-365 days out;
     Consent + its derived AccessPermission are written in one transaction
@@ -132,6 +137,7 @@ async def grant_consent(session: AsyncSession, actor: Actor, payload: ConsentCre
     own = await users_service.get_own_patient_profile(session, actor)
     if own is None:
         raise _not_found()
+    await users_service.lock_patient_for_write(session, own.id)
     grantee = await users_service.get_user(session, payload.grantee_user_id)
     if grantee is None or grantee.role != Role.CLINICIAN:
         raise _not_found()
@@ -146,14 +152,15 @@ async def grant_consent(session: AsyncSession, actor: Actor, payload: ConsentCre
         session,
         patient_id=own.id,
         grantee_user_id=payload.grantee_user_id,
-        entry_types=payload.entry_types,
+        entry_types=[entry_type.value for entry_type in payload.entry_types]
+        if payload.entry_types is not None
+        else None,
         from_date=payload.from_date,
         to_date=payload.to_date,
         purpose=payload.purpose,
         purpose_text=payload.purpose_text,
         expires_at=payload.expires_at,
     )
-    await session.commit()
     await audit_service.emit(
         session,
         actor=actor,
@@ -163,9 +170,11 @@ async def grant_consent(session: AsyncSession, actor: Actor, payload: ConsentCre
         patient_id=own.id,
         outcome=AuditOutcome.SUCCESS,
     )
-    return _to_wire(row)
+    grantee = await users_service.get_user(session, row.grantee_user_id)
+    return _to_wire(row, grantee.email if grantee else None)
 
 
+@transactional
 async def revoke_consent(
     session: AsyncSession,
     actor: Actor,
@@ -185,12 +194,13 @@ async def revoke_consent(
     existing = await repository.get_consent_by_id(session, consent_id)
     if existing is None or existing.patient_id != own.id:
         raise _not_found()
+    if existing.revoked_at is not None:
+        raise PulseError(ErrorCode.CONFLICT, "Consent was already revoked.", http_status=409)
     row = await repository.revoke_consent(
         session, consent_id, reason=payload.reason, revoked_at=datetime.now(UTC)
     )
     if row is None:
         raise _not_found()
-    await session.commit()
     await audit_service.emit(
         session,
         actor=actor,
@@ -211,7 +221,8 @@ async def revoke_consent(
         provider=provider,
         background_tasks=background_tasks,
     )
-    return _to_wire(row)
+    grantee = await users_service.get_user(session, row.grantee_user_id)
+    return _to_wire(row, grantee.email if grantee else None)
 
 
 async def list_consents(
@@ -219,6 +230,7 @@ async def list_consents(
     actor: Actor,
     patient_id: UUID | None,
     *,
+    view: Literal["active", "history"] | None = None,
     cursor: str | None = None,
     limit: int = 50,
 ) -> Page[Consent]:
@@ -230,9 +242,13 @@ async def list_consents(
     if own is None or (patient_id is not None and patient_id != own.id):
         raise _not_found()
     rows, next_cursor = await repository.list_consents_for_patient(
-        session, own.id, cursor=cursor, limit=limit
+        session, own.id, cursor=cursor, limit=limit, view=view
     )
-    return Page[Consent](items=[_to_wire(r) for r in rows], next_cursor=next_cursor)
+    emails = await users_service.user_email_map(
+        session, list({row.grantee_user_id for row in rows})
+    )
+    items = [_to_wire(row, emails.get(row.grantee_user_id)) for row in rows]
+    return Page[Consent](items=items, next_cursor=next_cursor)
 
 
 async def list_consented_patients(
@@ -245,9 +261,9 @@ async def list_consented_patients(
         session, actor.user_id, now=datetime.now(UTC), cursor=cursor, limit=limit
     )
     items: list[ConsentedPatient] = []
-    # ponytail: one get_patient per row (<=100); batch if lists grow.
+    patients = await users_service.patient_map(session, list({row.patient_id for row in rows}))
     for row in rows:
-        patient = await users_service.get_patient(session, row.patient_id)
+        patient = patients.get(row.patient_id)
         if patient is None:
             continue
         items.append(
@@ -258,6 +274,7 @@ async def list_consented_patients(
     return Page[ConsentedPatient](items=items, next_cursor=next_cursor)
 
 
+@transactional
 async def request_break_glass(
     session: AsyncSession,
     actor: Actor,
@@ -275,6 +292,7 @@ async def request_break_glass(
     patient = await users_service.get_patient(session, patient_id)
     if patient is None:
         raise _not_found()
+    await users_service.lock_patient_for_write(session, patient_id)
     expires_at = datetime.now(UTC) + _BREAK_GLASS_WINDOW
     grant = await repository.create_break_glass(
         session,
@@ -283,7 +301,6 @@ async def request_break_glass(
         justification=justification,
         expires_at=expires_at,
     )
-    await session.commit()
     await audit_service.emit(
         session,
         actor=actor,
@@ -304,3 +321,41 @@ async def request_break_glass(
             background_tasks=background_tasks,
         )
     return _break_glass_to_wire(grant)
+
+
+def clinical_access_predicate(
+    patient_id: UUID,
+    grantee_user_id: UUID,
+    entry_type: ColumnElement[Any],
+    occurred_at: ColumnElement[Any],
+) -> ColumnElement[bool]:
+    """Explicit composable read seam; only consent.repository knows its tables."""
+    return repository.clinical_access_predicate(
+        patient_id, grantee_user_id, entry_type, occurred_at
+    )
+
+
+async def live_permissions_for(
+    session: AsyncSession, patient_id: UUID, grantee_user_id: UUID
+) -> list[LivePermission]:
+    rows = await repository.live_permissions_for(session, patient_id, grantee_user_id)
+    return [
+        LivePermission(
+            id=row.id,
+            entry_types=row.entry_types,
+            from_date=row.from_date,
+            to_date=row.to_date,
+            expires_at=row.expires_at,
+        )
+        for row in rows
+    ]
+
+
+async def active_break_glass_for(
+    session: AsyncSession, patient_id: UUID, clinician_user_id: UUID
+) -> bool:
+    return await repository.active_break_glass_for(session, patient_id, clinician_user_id)
+
+
+async def has_live_patient_grants(session: AsyncSession, patient_id: UUID) -> bool:
+    return await repository.has_live_patient_grants(session, patient_id)

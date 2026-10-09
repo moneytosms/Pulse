@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.authz import Permission
+from app.core.pagination import Page
 from app.db.session import get_session
 from app.modules.admin import service
 from app.modules.admin.schemas import (
@@ -38,9 +39,9 @@ CurrentUser = Annotated[AuthContext, Depends(current_user)]
     dependencies=[requires(Permission.ADMIN_DUPLICATE_REVIEW)],
 )
 async def list_duplicate_review_queue(
-    ctx: CurrentUser, session: SessionDep
-) -> list[DuplicateReviewCandidate]:
-    return await service.duplicate_review_queue(session, ctx.actor)
+    ctx: CurrentUser, session: SessionDep, cursor: str | None = None, limit: int = 50
+) -> Page[DuplicateReviewCandidate]:
+    return await service.duplicate_review_queue(session, ctx.actor, cursor=cursor, limit=limit)
 
 
 @router.post(
@@ -71,8 +72,10 @@ async def merge_patients(
     "/merges",
     dependencies=[requires(Permission.ADMIN_DUPLICATE_REVIEW)],
 )
-async def list_reversible_merges(ctx: CurrentUser, session: SessionDep) -> list[MergeRecord]:
-    return await service.reversible_merges(session, ctx.actor)
+async def list_reversible_merges(
+    ctx: CurrentUser, session: SessionDep, cursor: str | None = None, limit: int = 50
+) -> Page[MergeRecord]:
+    return await service.reversible_merges(session, ctx.actor, cursor=cursor, limit=limit)
 
 
 @router.post(

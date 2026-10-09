@@ -32,5 +32,9 @@
     "datetime_from_date_parsing": "Enter a valid date and time.",
     "value_error": "Check this value.",
     "GENERIC": "This field needs attention."
-  }
+  },
+  "RATE_LIMITED": "Too many attempts. Wait a moment and try again.",
+  "INTERNAL_ERROR": "The request could not be completed. Please try again.",
+  "ANALYTICS_WINDOW_TOO_LARGE": "Choose a smaller date range. This series exceeds the 5,000-row display limit.",
+  "NOTIFICATION_TYPE_MANDATORY": "This notification is required and cannot be disabled."
 }

@@ -40,6 +40,7 @@ def _envelope_response(
     return JSONResponse(
         status_code=status_code,
         content=envelope.model_dump(by_alias=True, mode="json"),
+        headers={"X-Request-Id": get_request_id() or ""},
     )
 
 
@@ -58,3 +59,18 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
         "Validation failed.",
         details,
     )
+
+
+async def http_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    from starlette.exceptions import HTTPException
+
+    assert isinstance(exc, HTTPException)
+    code = {
+        401: ErrorCode.UNAUTHORIZED,
+        403: ErrorCode.FORBIDDEN,
+        404: ErrorCode.NOT_FOUND,
+        405: ErrorCode.VALIDATION_ERROR,
+        413: ErrorCode.PAYLOAD_TOO_LARGE,
+        429: ErrorCode.RATE_LIMITED,
+    }.get(exc.status_code, ErrorCode.INTERNAL_ERROR)
+    return _envelope_response(exc.status_code, code, "Request could not be completed.")

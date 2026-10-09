@@ -26,6 +26,18 @@ from app.db.base import Base
 
 
 class AuditAction(StrEnum):
+    ENTRY_CREATED = "ENTRY_CREATED"
+    ENTRY_CORRECTED = "ENTRY_CORRECTED"
+    DOCUMENT_UPLOADED = "DOCUMENT_UPLOADED"
+    ANALYTICS_VIEWED = "ANALYTICS_VIEWED"
+    PATIENT_MERGED = "PATIENT_MERGED"
+    MERGE_REVERSED = "MERGE_REVERSED"
+    ACCESS_DENIED = "ACCESS_DENIED"
+    LOGOUT = "LOGOUT"
+    LOGOUT_ALL = "LOGOUT_ALL"
+    STEP_UP_SUCCESS = "STEP_UP_SUCCESS"
+    STEP_UP_FAILURE = "STEP_UP_FAILURE"
+
     ENTRY_VIEWED = "ENTRY_VIEWED"
     DOCUMENT_VIEWED = "DOCUMENT_VIEWED"
     CONSENT_GRANTED = "CONSENT_GRANTED"
@@ -53,7 +65,7 @@ class AuditEvent(Base):
         index=True,
     )
     # Denormalised at write time — roles change, history must not.
-    actor_role: Mapped[Role] = mapped_column(SAEnum(Role, name="role"))
+    actor_role: Mapped[Role | None] = mapped_column(SAEnum(Role, name="role"))
     action: Mapped[AuditAction] = mapped_column(SAEnum(AuditAction, name="audit_action"))
     resource_type: Mapped[str] = mapped_column(String(64))
     resource_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True), default=None)

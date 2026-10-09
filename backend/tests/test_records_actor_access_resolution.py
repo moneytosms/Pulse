@@ -84,7 +84,9 @@ async def test_patient_owns_their_own_history(db_session: AsyncSession) -> None:
     assert resolved.has_any_access is True
 
 
-async def test_provider_staff_resolves_to_their_own_provider(db_session: AsyncSession) -> None:
+async def test_provider_membership_alone_does_not_establish_a_patient_relationship(
+    db_session: AsyncSession,
+) -> None:
     patient = await _patient(db_session, None)
     staff_user = await _user(db_session, Role.PROVIDER_STAFF)
     provider = Provider(name="Apollo", kind=ProviderKind.HOSPITAL, city="c", state="s")
@@ -97,8 +99,8 @@ async def test_provider_staff_resolves_to_their_own_provider(db_session: AsyncSe
     resolved = await access.resolve_patient_access(db_session, actor, patient.id)
 
     assert resolved.owns_own_history is False
-    assert resolved.provider_id == provider.id
-    assert resolved.has_any_access is True
+    assert resolved.provider_id is None
+    assert resolved.has_any_access is False
 
 
 async def test_clinician_with_no_live_permission_has_no_access(db_session: AsyncSession) -> None:

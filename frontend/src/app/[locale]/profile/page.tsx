@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { InfoIcon } from "lucide-react";
+import { CopyIcon, InfoIcon } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,20 +16,7 @@ import { useApiErrorMessage } from "@/lib/errors";
 
 // Identity fields only — the patient profile carries no clinical data
 // (issue #23, PatientProfile schema; .claude/rules/clinical-safety.md).
-interface PatientProfile {
-  id: string;
-  fullName: string;
-  // Nullable in the backend schema — an unclaimed or freshly registered
-  // Patient has only a name until identity data is filed.
-  dateOfBirth: string | null;
-  sex: string | null;
-  phone: string | null;
-  addressLine: string | null;
-  city: string | null;
-  state: string | null;
-  localePreference: string;
-  claimed: boolean;
-}
+import type { PatientProfile } from "@/lib/generated/api";
 
 const EMPTY = "—"; // em dash for a missing identity field
 
@@ -55,12 +44,15 @@ function ProfileSkeleton() {
 export default function ProfilePage() {
   const t = useTranslations("profile");
   const tLocale = useTranslations("locale");
+  const tActions = useTranslations("actions");
   const errorMessage = useApiErrorMessage();
   const router = useRouter();
+  const [retryToken, setRetryToken] = useState(0);
   const [state, setState] = useState<LoadState>({ status: "loading" });
 
   useEffect(() => {
     let active = true;
+    Promise.resolve().then(() => { if (active) setState({ status: "loading" }); });
     api
       .get<PatientProfile>("/patients/me")
       .then((profile) => {
@@ -83,7 +75,7 @@ export default function ProfilePage() {
     };
     // errorMessage / router are stable for the page lifetime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [retryToken]);
 
   const header = (
     <div className="space-y-1">
@@ -123,7 +115,7 @@ export default function ProfilePage() {
           <InfoIcon />
           <AlertTitle>{t("title")}</AlertTitle>
           <AlertDescription>{state.message}</AlertDescription>
-        </Alert>
+        </Alert><Button variant="outline" onClick={() => setRetryToken(n => n + 1)}>{tActions("retry")}</Button>
       </section>
     );
   }
@@ -161,7 +153,13 @@ export default function ProfilePage() {
                 className="grid grid-cols-1 gap-1 px-4 py-3 sm:grid-cols-3 sm:gap-4"
               >
                 <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
-                <dd className="text-sm text-foreground tabular-nums sm:col-span-2">{value}</dd>
+                <dd className="flex min-w-0 items-center gap-2 text-sm text-foreground tabular-nums sm:col-span-2">
+                  <span className="min-w-0 break-all">{value}</span>
+                  {label === t("fields.patientId") && <Button variant="ghost" size="sm" aria-label={t("copyId")} onClick={async () => {
+                    try { await navigator.clipboard.writeText(profile.id); toast.success(t("copiedId")); }
+                    catch { toast.error(t("copyFailed")); }
+                  }}><CopyIcon className="size-4" aria-hidden="true" /></Button>}
+                </dd>
               </div>
             ))}
           </dl>
