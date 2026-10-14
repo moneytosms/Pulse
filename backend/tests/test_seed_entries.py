@@ -186,3 +186,43 @@ async def test_second_seed_run_is_a_noop(client: AsyncClient, app_database_url: 
     result = await run_seed()
     assert result.skipped is True
     assert await _entry_count() == before
+
+
+def _planted_pairs() -> dict[str, set[frozenset[str]]]:
+    import csv
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "seed/data/identity/planted_pairs.csv"
+    pairs: dict[str, set[frozenset[str]]] = {}
+    with path.open(encoding="utf-8", newline="") as fh:
+        for r in csv.DictReader(fh):
+            pairs.setdefault(r["kind"], set()).add(
+                frozenset((r["patient_id_a"], r["patient_id_b"]))
+            )
+    return pairs
+
+
+async def test_seed_queues_planted_duplicates_for_review(app_database_url: str) -> None:
+    await _run_seed()
+
+    engine = create_async_engine(app_database_url)
+    try:
+        async with engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    text(
+                        "SELECT patient_id_a, patient_id_b FROM duplicate_review_item "
+                        "WHERE status = 'PENDING'"
+                    )
+                )
+            ).all()
+    finally:
+        await engine.dispose()
+    queued = {frozenset((str(a), str(b))) for a, b in rows}
+
+    planted = _planted_pairs()
+    assert len(planted["duplicate"]) == 3
+    assert planted["duplicate"] <= queued
+    # Near-miss siblings score below the 0.5 threshold: never flagged.
+    assert len(planted["near_miss"]) == 2
+    assert not (planted["near_miss"] & queued)

@@ -45,6 +45,7 @@ from app.core.authz import Role
 from app.core.security import hash_password
 from app.db.session import async_session
 from app.modules.records.models import Diagnosis, EntryType, LabReport, Prescription, Procedure
+from app.modules.users import service as users_service
 from app.modules.users.models import Patient, Provider, ProviderKind, ProviderStaff, Sex, User
 
 # Public demo credential -- this project never holds real patient data
@@ -456,6 +457,12 @@ async def run_seed() -> SeedResult:
             text("INSERT INTO seed_marker (id, dataset_sha256) VALUES (1, :h)"),
             {"h": _dataset_checksum(identity_dir, clinical_dir)},
         )
+        # Flag (never merge) planted duplicates so /admin/duplicates is populated.
+        # record_duplicate_candidates commits per call, so the marker goes in first:
+        # the first commit lands patients, entries and marker together. Upsert is
+        # idempotent per pair.
+        for pid in patient_ids:
+            await users_service.record_duplicate_candidates(session, uuid.UUID(pid))
         await session.commit()
         return SeedResult(skipped=False, counts=counts)
 
