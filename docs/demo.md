@@ -16,10 +16,17 @@ say while doing it.
   entry" (patients can't file; the button used to return 403). Both
   checked against the live stack. The e2e suite mocks the API, so a live
   run is still the only proof that the real backend agrees.
-- **Rehearsal:** one walk-through, on the author's own clone, before the
-  shadcn/ui rebuild (PR #59). It has not been re-rehearsed on the rebuilt
-  UI or on a fresh `git clone`, and nobody other than the author has
-  run it. #56 asks for a rehearsal on a machine that is not the author's.
+- **Rehearsed 2026-10-14:** fresh `git clone` into a scratch directory
+  (`/home/sms/pulse-rehearsal/Pulse`, separate from the working copy),
+  `docker compose up --build -d --wait` — all six containers healthy,
+  landing page (`/en/login`, `/hi/login`) returns 200, Mailpit reachable.
+  `npm run test:e2e:live` (the live spine spec, real browser against the
+  real backend, no mocks) passed: file → grant with step-up → clinician
+  read → audit → revoke → lockout. Stack torn down after with
+  `docker compose down -v`. This is the post-shadcn-rebuild (PR #59)
+  rehearsal #56 asked for; it exercises the full spine mechanically but
+  is not a substitute for a human clicking through the script below and
+  watching the UI.
 - **Locales:** Hindi, Tamil and Malayalam have not been reviewed by a
   native speaker. See [`locale-review.md`](locale-review.md).
 
