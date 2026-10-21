@@ -65,9 +65,6 @@ test("full demo spine against the live stack: file, grant, read, audit, revoke, 
     await patientPage.getByLabel("Clinician email").fill(CLINICIAN_EMAIL);
     await patientPage.getByRole("combobox", { name: "Purpose" }).click();
     await patientPage.getByRole("option", { name: "Treatment" }).click();
-    const expiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    const expiryValue = expiry.toISOString().slice(0, 16);
-    await patientPage.locator('input[type="datetime-local"]').fill(expiryValue);
     await patientPage
       .getByRole("radio", { name: "All entry types", exact: true })
       .check();

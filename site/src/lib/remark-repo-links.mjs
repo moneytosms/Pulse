@@ -21,6 +21,14 @@ export function rewriteRepoLinks() {
     const fromDir = path.dirname(path.relative(REPO_ROOT, path.resolve(source)));
 
     walk(tree, (node) => {
+      if (node.type === "html") {
+        // Raw <img src="./x"> (GitHub README banners) needs the same raw-bytes URL.
+        node.value = node.value.replace(/(<img\b[^>]*?\ssrc=")(?!\w+:|\/\/|#)([^"]+)"/gi, (_, pre, src) => {
+          const repoPath = path.posix.normalize(path.posix.join(fromDir.split(path.sep).join("/"), src));
+          return repoPath.startsWith("..") ? _ : `${pre}https://raw.githubusercontent.com/moneytosms/Pulse/main/${repoPath}"`;
+        });
+        return;
+      }
       if (node.type !== "link" && node.type !== "definition" && node.type !== "image") return;
       const url = node.url;
       if (!url || /^[a-z]+:|^\/\/|^#/i.test(url)) return;
