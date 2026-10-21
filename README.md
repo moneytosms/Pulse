@@ -1,10 +1,27 @@
 # Pulse
 
+[![CI](https://github.com/moneytosms/Pulse/actions/workflows/ci.yml/badge.svg)](https://github.com/moneytosms/Pulse/actions/workflows/ci.yml)
+[![Site](https://github.com/moneytosms/Pulse/actions/workflows/pages.yml/badge.svg)](https://moneytosms.github.io/Pulse/)
+![Python](https://img.shields.io/badge/backend-FastAPI-009688)
+![Next.js](https://img.shields.io/badge/frontend-Next.js-black)
+![PostgreSQL](https://img.shields.io/badge/db-PostgreSQL-336791)
+![Languages](https://img.shields.io/badge/i18n-EN%20%C2%B7%20HI%20%C2%B7%20TA%20%C2%B7%20ML-orange)
+
 A lifelong electronic health record platform. Patients own their medical history; providers contribute to it; clinicians read it only with the patient's consent, and every access is recorded.
 
 Built for an Indian demographic, in English, Hindi, Tamil and Malayalam. An academic project — it never touches real patient data — held to real engineering practice.
 
 Project site: <https://moneytosms.github.io/Pulse/> · Guide: <https://moneytosms.github.io/Pulse/guide/>
+
+## Highlights
+
+- **Patient-owned history.** Entries, documents and corrections live under the patient, not the provider.
+- **Consent-gated reads.** Clinicians see nothing until the patient grants scoped access, confirmed with their password; revoking locks them out immediately.
+- **Everything audited.** Every access is recorded and visible to the patient as access history.
+- **Emergency access.** A scoped, logged break-glass path for urgent care.
+- **Four portals.** Patient, clinician, provider staff and administrator, each with its own view.
+- **Multilingual UI.** English, Hindi, Tamil and Malayalam. The interface is localised; clinical data is not.
+- **Reproducible demo.** Seeded with Synthea plus an Indian overlay; one `docker compose up` brings the whole stack online.
 
 ## Status
 
