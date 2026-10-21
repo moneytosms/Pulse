@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="260" viewBox="0 0 1200 260" role="img" aria-labelledby="t d">
+  <title id="t">The Pulse consent journey</title>
+  <desc id="d">Five steps: provider files an entry, patient grants scoped consent, clinician reads, patient reviews access history, patient revokes and the clinician is locked out.</desc>
+  <rect width="1200" height="260" rx="26" fill="#fbf3f4"/>
+  <rect x="0.5" y="0.5" width="1199" height="259" rx="25.5" fill="none" stroke="#e8cdd2"/>
+  <path d="M120 100 H1080" stroke="#e1bcc4" stroke-width="3" stroke-dasharray="2 10" stroke-linecap="round"/>
+  <g font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" text-anchor="middle">
+    <g transform="translate(120 100)"><circle r="34" fill="#7b1e3a"/><text y="9" font-size="26" font-weight="700" fill="#fff">1</text><text y="68" font-size="22" font-weight="700" fill="#2e1a1f">File</text><text y="96" font-size="18" fill="#6b4a51">Provider adds an entry</text></g>
+    <g transform="translate(360 100)"><circle r="34" fill="#7b1e3a"/><text y="9" font-size="26" font-weight="700" fill="#fff">2</text><text y="68" font-size="22" font-weight="700" fill="#2e1a1f">Grant</text><text y="96" font-size="18" fill="#6b4a51">Patient consents, scoped</text></g>
+    <g transform="translate(600 100)"><circle r="34" fill="#7b1e3a"/><text y="9" font-size="26" font-weight="700" fill="#fff">3</text><text y="68" font-size="22" font-weight="700" fill="#2e1a1f">Read</text><text y="96" font-size="18" fill="#6b4a51">Clinician sees only that</text></g>
+    <g transform="translate(840 100)"><circle r="34" fill="#7b1e3a"/><text y="9" font-size="26" font-weight="700" fill="#fff">4</text><text y="68" font-size="22" font-weight="700" fill="#2e1a1f">Review</text><text y="96" font-size="18" fill="#6b4a51">Patient sees who looked</text></g>
+    <g transform="translate(1080 100)"><circle r="34" fill="#a85f42"/><text y="9" font-size="26" font-weight="700" fill="#fff">5</text><text y="68" font-size="22" font-weight="700" fill="#2e1a1f">Revoke</text><text y="96" font-size="18" fill="#6b4a51">Clinician is locked out</text></g>
+  </g>
+</svg>

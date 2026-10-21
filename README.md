@@ -1,4 +1,8 @@
-# Pulse
+<h1 align="center">Pulse</h1>
+
+<p align="center">
+  <img src="./assets/readme/hero.svg" width="100%" alt="Pulse: a lifelong electronic health record. Your history, shared only with who you choose, every access recorded.">
+</p>
 
 [![CI](https://github.com/moneytosms/Pulse/actions/workflows/ci.yml/badge.svg)](https://github.com/moneytosms/Pulse/actions/workflows/ci.yml)
 [![Site](https://github.com/moneytosms/Pulse/actions/workflows/pages.yml/badge.svg)](https://moneytosms.github.io/Pulse/)
@@ -53,17 +57,21 @@ On first boot the backend runs migrations and seeds identity data. Then:
 - Mailpit inbox (default local verification emails): `http://localhost:8025`; Gmail SMTP setup is in [`docs/demo.md`](docs/demo.md)
 - Seeded patient login: `demo.patient.hi@example.com` / `Pulse@demo1` (also `demo.patient.en@example.com`; see [`seed/README.md`](seed/README.md))
 
-Demo journey: provider files an entry → patient grants clinician access with password confirmation → clinician reads → patient reviews access history → patient revokes → clinician is locked out. The live browser suite rehearses this through Caddy.
+Demo journey:
+
+<p align="center">
+  <img src="./assets/readme/flow.svg" width="100%" alt="Five steps: provider files an entry, patient grants scoped consent, clinician reads, patient reviews access history, patient revokes.">
+</p>
+
+In words: provider files an entry → patient grants clinician access with password confirmation → clinician reads → patient reviews access history → patient revokes → clinician is locked out. The live browser suite rehearses this through Caddy.
 
 ## Shape
 
 A modular monolith: one FastAPI application, one PostgreSQL database, organised by business domain.
 
-```
-browser → Caddy ┬→ /api/*  FastAPI ┬→ PostgreSQL
-                │                  └→ Redis (sessions, rate limits, short-lived tokens)
-                └→ /*      Next.js
-```
+<p align="center">
+  <img src="./assets/readme/architecture.svg" width="100%" alt="Browser to Caddy; /api to FastAPI backed by PostgreSQL and Redis; everything else to Next.js.">
+</p>
 
 Modules: `auth · users · patients · providers · records · consent · audit · notifications · analytics · admin`
 
